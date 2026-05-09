@@ -1,8 +1,28 @@
 import { MarkerType, type Edge } from '@xyflow/react';
+import type { CSSProperties } from 'react';
 import type { ImageXEdge, ImageXNode, ImageXWorkflow, NodeType } from '../../../shared/types.js';
+import { editableFieldDefinitionsFor } from './fields/definitions.js';
 import { nodeMeta } from './meta.js';
 import { inputPortsFor, outputPortsFor, portLabel } from './ports.js';
 import type { OpenNodeMenu, UiEdge, UiNode, UiNodeData, UpdateNodeData } from './types.js';
+
+const NODE_WIDTH_EXTRA_REM = 3.25;
+const MIN_FIELD_LABEL_WIDTH_REM = 7.5;
+const MAX_FIELD_LABEL_WIDTH_REM = 16;
+const DEFAULT_CONTROL_WIDTH_REM = 13.5;
+
+export function nodeWidthRem(node: ImageXNode): number {
+  if (node.type === 'frame') {
+    return Number(node.data.width) / 16 || 32.5;
+  }
+  const fields = editableFieldDefinitionsFor(node);
+  const longestLabel = Math.max(0, ...fields.map((field) => field.label.length));
+  const fieldLabelWidth = Math.min(
+    Math.max(MIN_FIELD_LABEL_WIDTH_REM, longestLabel * 0.72 + 2.75),
+    MAX_FIELD_LABEL_WIDTH_REM
+  );
+  return fieldLabelWidth + DEFAULT_CONTROL_WIDTH_REM + NODE_WIDTH_EXTRA_REM;
+}
 
 export function workflowToFlow(
   workflow: ImageXWorkflow,
@@ -35,6 +55,8 @@ export function workflowToFlow(
       if (onOpenAssetPicker) data.onOpenAssetPicker = onOpenAssetPicker;
       const frameWidth = Number(node.data.width) || 520;
       const frameHeight = Number(node.data.height) || 360;
+      const widthRem = nodeWidthRem(node);
+      const nodeStyle: CSSProperties = { width: `${widthRem}rem`, '--node-width': `${widthRem}rem` } as CSSProperties;
       return {
         id: node.id,
         type: node.type,
@@ -50,7 +72,10 @@ export function workflowToFlow(
               initialHeight: frameHeight,
               style: { width: frameWidth, height: frameHeight },
             }
-          : { zIndex: 10 }),
+          : {
+              zIndex: 10,
+              style: nodeStyle,
+            }),
       };
     }),
     edges: normalizedEdges.map((edge) => toFlowEdge(edge, workflowNodes)),
