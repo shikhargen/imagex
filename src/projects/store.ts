@@ -1,0 +1,375 @@
+import { randomUUID } from 'node:crypto';
+import { access, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { extname, join } from 'node:path';
+import { imagexPaths } from '../config/paths.js';
+import type {
+  ImageXProject,
+  ImageXAsset,
+  ImageXProjectMetadata,
+  ImageXProjectSummary,
+  ImageXTemplateSummary,
+  ImageXWorkflow,
+} from '../shared/types.js';
+import { createDefaultWorkflow, createEmptyWorkflow } from '../workflows/defaults.js';
+
+const metadataFile = 'imagex.project.json';
+const workflowFile = 'workflow.imagex.json';
+const assetsManifestFile = 'assets.json';
+
+export type CreateProjectInput = {
+  title: string;
+  description?: string;
+  templateId?: string;
+};
+
+export async function listProjects(): Promise<ImageXProjectSummary[]> {
+  const root = imagexPaths().projectsDir;
+  await mkdir(root, { recursive: true });
+  await migrateLegacyWorkflows();
+  const entries = await readdir(root, { withFileTypes: true });
+  const projects = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => readProjectSummary(entry.name).catch(() => null))
+  );
+  return projects
+    .filter((project): project is ImageXProjectSummary => Boolean(project))
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+async function migrateLegacyWorkflows(): Promise<void> {
+  const legacyDir = imagexPaths().workflowsDir;
+  const files = await readdir(legacyDir).catch(() => []);
+  await Promise.all(
+    files
+      .filter((file) => file.endsWith('.imagex.json'))
+      .map(async (file) => {
+        const workflow = JSON.parse(await readFile(join(legacyDir, file), 'utf8')) as ImageXWorkflow;
+        const id = `${slugify(workflow.name || 'legacy-workflow')}-${workflow.id.slice(0, 8)}`;
+        const dir = projectDir(id);
+        const metadataPath = join(dir, metadataFile);
+        if (await exists(metadataPath)) return;
+        const now = workflow.updatedAt || new Date().toISOString();
+        const metadata: ImageXProjectMetadata = {
+          app: 'imagex',
+          schemaVersion: 1,
+          id,
+          title: workflow.name || 'Legacy Workflow',
+          createdAt: workflow.createdAt || now,
+          updatedAt: now,
+          workflowFile,
+          assetsDir: 'assets',
+          outputsDir: 'outputs',
+        };
+        await mkdir(join(dir, metadata.assetsDir), { recursive: true });
+        await mkdir(join(dir, metadata.outputsDir), { recursive: true });
+        await writeFile(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+        await writeFile(join(dir, metadata.workflowFile), `${JSON.stringify(workflow, null, 2)}\n`, 'utf8');
+      })
+  );
+}
+
+export async function getProject(id: string): Promise<ImageXProject> {
+  const dir = projectDir(id);
+  let metadata = JSON.parse(await readFile(join(dir, metadataFile), 'utf8')) as ImageXProjectMetadata;
+  assertProjectMetadata(metadata);
+  const activeWorkflowFile = metadata.workflows?.[0]?.file || metadata.workflowFile;
+  const rawWorkflow = JSON.parse(await readFile(join(dir, activeWorkflowFile), 'utf8')) as Partial<ImageXWorkflow>;
+  const workflow = normalizeWorkflow(rawWorkflow, metadata);
+  if (!metadata.workflows?.length || metadata.workflows[0]?.id === 'default') {
+    metadata = {
+      ...metadata,
+      workflows: [{ id: workflow.id, title: workflow.name, file: activeWorkflowFile }],
+    };
+    await writeFile(join(dir, metadataFile), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+  }
+  return { metadata, workflow };
+}
+
+export async function createProject(input: CreateProjectInput): Promise<ImageXProject> {
+  const now = new Date().toISOString();
+  const title = input.title.trim() || 'Untitled Project';
+  const id = `${slugify(title)}-${randomUUID().slice(0, 8)}`;
+  const dir = projectDir(id);
+  const workflow = workflowForTemplate(input.templateId, title);
+  const metadata: ImageXProjectMetadata = {
+    app: 'imagex',
+    schemaVersion: 1,
+    id,
+    title,
+    createdAt: now,
+    updatedAt: now,
+    workflowFile,
+    workflows: [{ id: workflow.id, title: workflow.name, file: workflowFile }],
+    assetsDir: 'assets',
+    outputsDir: 'outputs',
+  };
+  if (input.description?.trim()) metadata.description = input.description.trim();
+
+  await mkdir(join(dir, metadata.assetsDir), { recursive: true });
+  await mkdir(join(dir, metadata.outputsDir), { recursive: true });
+  await writeFile(join(dir, metadataFile), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+  await writeFile(join(dir, metadata.workflowFile), `${JSON.stringify(workflow, null, 2)}\n`, 'utf8');
+  return { metadata, workflow };
+}
+
+export async function renameProject(projectId: string, title: string): Promise<ImageXProject> {
+  const project = await getProject(projectId);
+  const updatedAt = new Date().toISOString();
+  const metadata: ImageXProjectMetadata = {
+    ...project.metadata,
+    title: title.trim() || project.metadata.title,
+    updatedAt,
+  };
+  await writeFile(join(projectDir(projectId), metadataFile), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+  return { metadata, workflow: project.workflow };
+}
+
+export async function deleteProject(projectId: string): Promise<void> {
+  await rm(projectDir(projectId), { recursive: true, force: true });
+}
+
+export async function saveProjectWorkflow(id: string, workflow: ImageXWorkflow): Promise<ImageXProject> {
+  const project = await getProject(id);
+  const normalized = normalizeWorkflow(workflow, project.metadata);
+  const workflowEntry = workflowEntryFor(project.metadata, normalized);
+  const updatedWorkflow: ImageXWorkflow = {
+    ...normalized,
+    updatedAt: new Date().toISOString(),
+  };
+  const updatedMetadata: ImageXProjectMetadata = {
+    ...project.metadata,
+    title: updatedWorkflow.name || project.metadata.title,
+    updatedAt: updatedWorkflow.updatedAt,
+    workflows: upsertWorkflowEntry(project.metadata, workflowEntry, updatedWorkflow.name),
+  };
+  const dir = projectDir(id);
+  await writeFile(join(dir, workflowEntry.file), `${JSON.stringify(updatedWorkflow, null, 2)}\n`, 'utf8');
+  await writeFile(join(dir, metadataFile), `${JSON.stringify(updatedMetadata, null, 2)}\n`, 'utf8');
+  return { metadata: updatedMetadata, workflow: updatedWorkflow };
+}
+
+export async function createProjectWorkflow(projectId: string, title = 'Untitled Workflow'): Promise<ImageXProject> {
+  const project = await getProject(projectId);
+  const workflow = createEmptyWorkflow(title);
+  const file = `workflow-${workflow.id}.imagex.json`;
+  const metadata: ImageXProjectMetadata = {
+    ...project.metadata,
+    updatedAt: new Date().toISOString(),
+    workflows: [...workflowEntries(project.metadata), { id: workflow.id, title: workflow.name, file }],
+  };
+  const dir = projectDir(projectId);
+  await writeFile(join(dir, file), `${JSON.stringify(workflow, null, 2)}\n`, 'utf8');
+  await writeFile(join(dir, metadataFile), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+  return { metadata, workflow };
+}
+
+export async function loadProjectWorkflow(projectId: string, workflowId: string): Promise<ImageXProject> {
+  const project = await getProject(projectId);
+  const entry = workflowEntries(project.metadata).find((candidate) => candidate.id === workflowId);
+  if (!entry) throw new Error('Workflow not found.');
+  const rawWorkflow = JSON.parse(await readFile(join(projectDir(projectId), entry.file), 'utf8')) as Partial<ImageXWorkflow>;
+  return { metadata: project.metadata, workflow: normalizeWorkflow(rawWorkflow, project.metadata) };
+}
+
+export async function deleteProjectWorkflow(projectId: string, workflowId: string): Promise<ImageXProject> {
+  const project = await getProject(projectId);
+  const entries = workflowEntries(project.metadata);
+  if (entries.length <= 1) throw new Error('Cannot delete the only workflow in a project.');
+  const nextEntries = entries.filter((entry) => entry.id !== workflowId);
+  const metadata = { ...project.metadata, workflows: nextEntries, updatedAt: new Date().toISOString() };
+  await writeFile(join(projectDir(projectId), metadataFile), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+  return loadProjectWorkflow(projectId, nextEntries[0]!.id);
+}
+
+export async function listProjectAssets(projectId: string): Promise<ImageXAsset[]> {
+  const project = await getProject(projectId);
+  return readAssetsManifest(project.metadata);
+}
+
+export async function importProjectAsset(
+  projectId: string,
+  input: { name: string; mimeType: string; dataBase64: string }
+): Promise<ImageXAsset[]> {
+  const project = await getProject(projectId);
+  const assets = await readAssetsManifest(project.metadata);
+  const now = new Date().toISOString();
+  const id = `asset-${randomUUID().slice(0, 10)}`;
+  const extension = extensionForMime(input.mimeType) || extname(input.name).slice(1) || 'png';
+  const safeName = slugify(input.name.replace(/\.[^.]+$/, '') || 'image');
+  const file = `${id}-${safeName}.${extension}`;
+  const asset: ImageXAsset = {
+    id,
+    name: input.name.trim() || file,
+    type: 'image',
+    file,
+    url: `/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(file)}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await mkdir(join(projectDir(projectId), project.metadata.assetsDir), { recursive: true });
+  await writeFile(join(projectDir(projectId), project.metadata.assetsDir, file), Buffer.from(input.dataBase64, 'base64'));
+  await writeAssetsManifest(project.metadata, [...assets, asset]);
+  return [...assets, asset];
+}
+
+export async function renameProjectAsset(projectId: string, assetId: string, name: string): Promise<ImageXAsset[]> {
+  const project = await getProject(projectId);
+  const assets = await readAssetsManifest(project.metadata);
+  const now = new Date().toISOString();
+  const nextAssets = assets.map((asset) =>
+    asset.id === assetId ? { ...asset, name: name.trim() || asset.name, updatedAt: now } : asset
+  );
+  await writeAssetsManifest(project.metadata, nextAssets);
+  return nextAssets;
+}
+
+export async function deleteProjectAsset(projectId: string, assetId: string): Promise<ImageXAsset[]> {
+  const project = await getProject(projectId);
+  const assets = await readAssetsManifest(project.metadata);
+  const asset = assets.find((candidate) => candidate.id === assetId);
+  const nextAssets = assets.filter((candidate) => candidate.id !== assetId);
+  if (asset) await rm(join(projectDir(projectId), project.metadata.assetsDir, asset.file), { force: true });
+  await writeAssetsManifest(project.metadata, nextAssets);
+  return nextAssets;
+}
+
+export function projectAssetDir(projectId: string): string {
+  return join(projectDir(projectId), 'assets');
+}
+
+function normalizeWorkflow(workflow: Partial<ImageXWorkflow> | undefined, metadata: ImageXProjectMetadata): ImageXWorkflow {
+  const fallback = createEmptyWorkflow(metadata.title);
+  return {
+    ...fallback,
+    ...workflow,
+    id: typeof workflow?.id === 'string' ? workflow.id : fallback.id,
+    version: '0.1',
+    name: typeof workflow?.name === 'string' && workflow.name.trim() ? workflow.name : metadata.title,
+    createdAt: typeof workflow?.createdAt === 'string' ? workflow.createdAt : metadata.createdAt,
+    updatedAt: typeof workflow?.updatedAt === 'string' ? workflow.updatedAt : metadata.updatedAt,
+    settings: workflow?.settings?.provider ? workflow.settings : fallback.settings,
+    nodes: Array.isArray(workflow?.nodes) ? workflow.nodes : [],
+    edges: Array.isArray(workflow?.edges) ? workflow.edges : [],
+  };
+}
+
+export function listTemplates(): ImageXTemplateSummary[] {
+  return [
+    {
+      id: 'scratch',
+      title: 'Blank Project',
+      description: 'Start with an empty canvas.',
+    },
+    {
+      id: 'starter',
+      title: 'Starter Workflow',
+      description: 'Text, style, scene, and output nodes wired together.',
+    },
+  ];
+}
+
+export function projectOutputDir(projectId: string): string {
+  return join(projectDir(projectId), 'outputs');
+}
+
+function workflowForTemplate(templateId: string | undefined, title: string): ImageXWorkflow {
+  const workflow = templateId === 'starter' ? createDefaultWorkflow() : createEmptyWorkflow(title);
+  return {
+    ...workflow,
+    name: title,
+  };
+}
+
+async function readAssetsManifest(metadata: ImageXProjectMetadata): Promise<ImageXAsset[]> {
+  const manifestPath = join(projectDir(metadata.id), metadata.assetsDir, assetsManifestFile);
+  const raw = await readFile(manifestPath, 'utf8').catch(() => '[]');
+  const assets = JSON.parse(raw) as ImageXAsset[];
+  return Array.isArray(assets)
+    ? assets.map((asset) => ({
+        ...asset,
+        url: `/api/projects/${encodeURIComponent(metadata.id)}/assets/${encodeURIComponent(asset.file)}`,
+      }))
+    : [];
+}
+
+async function writeAssetsManifest(metadata: ImageXProjectMetadata, assets: ImageXAsset[]): Promise<void> {
+  await mkdir(join(projectDir(metadata.id), metadata.assetsDir), { recursive: true });
+  await writeFile(join(projectDir(metadata.id), metadata.assetsDir, assetsManifestFile), `${JSON.stringify(assets, null, 2)}\n`, 'utf8');
+}
+
+function extensionForMime(mimeType: string): string | null {
+  if (mimeType === 'image/png') return 'png';
+  if (mimeType === 'image/jpeg') return 'jpg';
+  if (mimeType === 'image/webp') return 'webp';
+  if (mimeType === 'image/gif') return 'gif';
+  return null;
+}
+
+function workflowEntries(metadata: ImageXProjectMetadata): Array<{ id: string; title: string; file: string }> {
+  return metadata.workflows?.length
+    ? metadata.workflows
+    : [{ id: 'default', title: metadata.title, file: metadata.workflowFile }];
+}
+
+function workflowEntryFor(metadata: ImageXProjectMetadata, workflow: ImageXWorkflow): { id: string; title: string; file: string } {
+  const entries = workflowEntries(metadata);
+  const existing = entries.find((entry) => entry.id === workflow.id);
+  const legacyOnly = entries.length === 1 && entries[0]?.file === metadata.workflowFile;
+  return existing
+    ? existing
+    : { id: workflow.id, title: workflow.name, file: legacyOnly ? metadata.workflowFile : `workflow-${workflow.id}.imagex.json` };
+}
+
+function upsertWorkflowEntry(
+  metadata: ImageXProjectMetadata,
+  entry: { id: string; title: string; file: string },
+  title: string
+): Array<{ id: string; title: string; file: string }> {
+  const entries = workflowEntries(metadata);
+  const next = { ...entry, title };
+  return entries.some((candidate) => candidate.id === entry.id)
+    ? entries.map((candidate) => (candidate.id === entry.id ? next : candidate))
+    : [...entries, next];
+}
+
+async function readProjectSummary(id: string): Promise<ImageXProjectSummary> {
+  const dir = projectDir(id);
+  const metadata = JSON.parse(await readFile(join(dir, metadataFile), 'utf8')) as ImageXProjectMetadata;
+  assertProjectMetadata(metadata);
+  const summary: ImageXProjectSummary = {
+    id: metadata.id,
+    title: metadata.title,
+    createdAt: metadata.createdAt,
+    updatedAt: metadata.updatedAt,
+    path: dir,
+  };
+  if (metadata.description) summary.description = metadata.description;
+  return summary;
+}
+
+function assertProjectMetadata(metadata: ImageXProjectMetadata): void {
+  if (metadata.app !== 'imagex' || metadata.schemaVersion !== 1 || !metadata.id || !metadata.workflowFile) {
+    throw new Error('Invalid imagex project metadata.');
+  }
+}
+
+function projectDir(id: string): string {
+  if (!/^[a-z0-9][a-z0-9-]*$/i.test(id)) throw new Error('Invalid project id.');
+  return join(imagexPaths().projectsDir, id);
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'project';
+}
+
+async function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false
+  );
+}
