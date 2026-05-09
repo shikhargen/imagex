@@ -697,6 +697,15 @@ kbd {
   overflow: visible;
 }
 
+.ix-node-text { --node-accent: #6ee7b7; }
+.ix-node-character { --node-accent: #a78bfa; }
+.ix-node-style { --node-accent: #f472b6; }
+.ix-node-scene { --node-accent: #f59e0b; }
+.ix-node-imageInput { --node-accent: #60a5fa; }
+.ix-node-output { --node-accent: #22d3ee; }
+.ix-node-frame { --node-accent: #6b7280; }
+.ix-node-custom { --node-accent: #a3a3a3; }
+
 /* Override React Flow built-in output node border that interferes with our custom nodes */
 .react-flow__node-output {
   border: none !important;

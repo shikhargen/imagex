@@ -1106,7 +1106,6 @@ export function App() {
           onEdgesChange={updateFlowEdges}
           onSelectNode={setSelectedId}
           onNodeMenu={openNodeMenu}
-          onShowPrompt={showCompiledPrompt}
           onBeforeChange={recordHistory}
           onPaneMenu={(position, flowPosition) => setMenu({ type: 'pane', x: position.x, y: position.y, flowX: flowPosition.x, flowY: flowPosition.y })}
           onSelectionMenu={(position) => setMenu({ type: 'selection', x: position.x, y: position.y })}

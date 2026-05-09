@@ -15,7 +15,7 @@ import {
   SelectionMode,
   type ReactFlowInstance,
 } from '@xyflow/react';
-import { useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useMemo, useRef } from 'react';
 import type { NodeType } from '../../../shared/types.js';
 import { nodeMeta } from '../flow/meta.js';
 import { isCompatibleConnection, portLabel } from '../flow/ports.js';
@@ -49,7 +49,6 @@ export function FlowEditor({
   onEdgesChange,
   onSelectNode,
   onNodeMenu,
-  onShowPrompt,
   onBeforeChange,
   onPaneMenu,
   onSelectionMenu,
@@ -66,7 +65,6 @@ export function FlowEditor({
   onEdgesChange: (edges: UiEdge[]) => void;
   onSelectNode: (nodeId: string | null) => void;
   onNodeMenu: (nodeId: string, position: { x: number; y: number }) => void;
-  onShowPrompt: () => void;
   onBeforeChange: () => void;
   onPaneMenu: (position: { x: number; y: number }, flowPosition: { x: number; y: number }) => void;
   onSelectionMenu: (position: { x: number; y: number }) => void;
@@ -129,29 +127,17 @@ export function FlowEditor({
     [edges, onBeforeChange, onEdgesChange]
   );
 
-  const coloredNodes = useMemo(
-    () =>
-      nodes.map((node) => {
-        const nextNode: UiNode = {
-          ...node,
-          data: {
-            ...node.data,
-            onShowPrompt,
-          },
-          style: {
-            ...node.style,
-            '--node-accent': nodeMeta[node.type as NodeType].accent,
-          } as React.CSSProperties,
-        };
-        return nextNode;
-      }),
-    [nodes]
+  const memoizedEdgeOptions = useMemo(
+    () => ({ type: 'default' as const, reconnectable: true as const, zIndex: 5 }),
+    []
   );
+  const memoizedFitViewOptions = useMemo(() => ({ padding: 0.2 }), []);
+  const memoizedPanOnDrag = useMemo(() => [1, 2] as [number, number], []);
 
   return (
     <section className="canvas">
       <ReactFlow
-        nodes={coloredNodes}
+        nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={handleNodesChange}
@@ -217,15 +203,15 @@ export function FlowEditor({
         }}
         onPaneClick={onPaneClickClear}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={memoizedFitViewOptions}
         minZoom={0.25}
         maxZoom={1.6}
         selectionOnDrag
         selectionMode={SelectionMode.Partial}
         selectionKeyCode={null}
-        panOnDrag={[1, 2]}
+        panOnDrag={memoizedPanOnDrag}
         connectionLineType={ConnectionLineType.Bezier}
-        defaultEdgeOptions={{ type: 'default', reconnectable: true, zIndex: 5 }}
+        defaultEdgeOptions={memoizedEdgeOptions}
         elevateNodesOnSelect={false}
       >
         <Background variant={BackgroundVariant.Dots} color="#5b6472" gap={24} size={1.35} />

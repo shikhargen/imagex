@@ -1,6 +1,6 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Eye, MoreHorizontal, Plus } from 'lucide-react';
-import type { CSSProperties, MouseEvent } from 'react';
+import { memo, type CSSProperties, type MouseEvent } from 'react';
 import type { CustomFieldDefinition, NodeType } from '../../../../shared/types.js';
 import { FieldControl } from '../fields/FieldControl.js';
 import { customFieldValue, editableFieldDefinitionsFor } from '../fields/definitions.js';
@@ -10,37 +10,46 @@ import type { UiNode } from '../types.js';
 
 type Props = NodeProps<UiNode>;
 
-export function TextNode(props: Props) {
+function TextNodeImpl(props: Props) {
   return <BaseNode {...props} />;
 }
 
-export function CharacterNode(props: Props) {
+function CharacterNodeImpl(props: Props) {
   return <BaseNode {...props} />;
 }
 
-export function StyleNode(props: Props) {
+function StyleNodeImpl(props: Props) {
   return <BaseNode {...props} />;
 }
 
-export function SceneNode(props: Props) {
+function SceneNodeImpl(props: Props) {
   return <BaseNode {...props} />;
 }
 
-export function ImageInputNode(props: Props) {
+function ImageInputNodeImpl(props: Props) {
   return <BaseNode {...props} />;
 }
 
-export function OutputNode(props: Props) {
+function OutputNodeImpl(props: Props) {
   return <BaseNode {...props} preview />;
 }
 
-export function CustomNode(props: Props) {
+function CustomNodeImpl(props: Props) {
   return <BaseNode {...props} />;
 }
 
-export function FrameNode(props: Props) {
+function FrameNodeImpl(props: Props) {
   return <BaseNode {...props} frame />;
 }
+
+export const TextNode = memo(TextNodeImpl);
+export const CharacterNode = memo(CharacterNodeImpl);
+export const StyleNode = memo(StyleNodeImpl);
+export const SceneNode = memo(SceneNodeImpl);
+export const ImageInputNode = memo(ImageInputNodeImpl);
+export const OutputNode = memo(OutputNodeImpl);
+export const CustomNode = memo(CustomNodeImpl);
+export const FrameNode = memo(FrameNodeImpl);
 
 function BaseNode({ data, selected, preview, frame }: Props & { preview?: boolean; frame?: boolean }) {
   const node = data.workflowNode;
