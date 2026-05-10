@@ -108,6 +108,7 @@ export function App() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showMinimap, setShowMinimap] = useState(() => localStorage.getItem('imagex.minimap') !== 'false');
   const [textDialog, setTextDialog] = useState<TextDialogState>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem('imagex.fontScale')) || 1);
@@ -137,7 +138,12 @@ export function App() {
   const [placingNodeId, setPlacingNodeId] = useState<string | null>(null);
   const placingNodeIdRef = useRef<string | null>(null);
   const placingNodeOffsetsRef = useRef<Array<{ id: string; dx: number; dy: number }>>([]);
-  const flowApiRef = useRef<{ screenToFlowPosition: (p: { x: number; y: number }) => { x: number; y: number } } | null>(null);
+  const flowApiRef = useRef<{
+    screenToFlowPosition: (p: { x: number; y: number }) => { x: number; y: number };
+    zoomIn: () => void;
+    zoomOut: () => void;
+    fitView: () => void;
+  } | null>(null);
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -148,6 +154,10 @@ export function App() {
     document.documentElement.style.setProperty('--font-scale', String(fontScale));
     localStorage.setItem('imagex.fontScale', String(fontScale));
   }, [fontScale]);
+
+  useEffect(() => {
+    localStorage.setItem('imagex.minimap', String(showMinimap));
+  }, [showMinimap]);
 
   useEffect(() => {
     localStorage.setItem('imagex.rightOpen', String(rightOpen));
@@ -571,6 +581,28 @@ export function App() {
     setActiveSidePanel((current) => (current === 'assets' ? null : 'assets'));
     void refreshAssets();
     void refreshNodeAssets();
+  }
+
+  function handleTopBarMenuAction(action: string) {
+    if (!workflow) return;
+    if (action === 'file-new-workflow') void createWorkflow();
+    if (action === 'file-rename-workflow') renameWorkflowFromMenu(workflow.id);
+    if (action === 'file-compile-prompt') void showCompiledPrompt(selectedIdRef.current ?? undefined);
+    if (action === 'edit-undo') undo();
+    if (action === 'edit-redo') redo();
+    if (action === 'edit-duplicate') duplicateSelection();
+    if (action === 'edit-delete') deleteSelection();
+    if (action === 'edit-disconnect') disconnectSelection();
+    if (action === 'edit-detach-frame') detachSelectionFromFrames();
+    if (action === 'edit-clear-selection') clearSelection();
+    if (action === 'view-zoom-in') flowApiRef.current?.zoomIn();
+    if (action === 'view-zoom-out') flowApiRef.current?.zoomOut();
+    if (action === 'view-fit') flowApiRef.current?.fitView();
+    if (action === 'view-toggle-minimap') setShowMinimap((current) => !current);
+    if (action === 'view-toggle-inspector') setRightOpen((current) => !current);
+    if (action === 'settings-open') openSettingsRoute();
+    if (action === 'settings-shortcuts') setShowShortcuts(true);
+    if (action === 'exit-project') closeProject();
   }
 
   function selectAssetForField(asset: ImageXAsset) {
@@ -1434,7 +1466,9 @@ export function App() {
         onSelectWorkflow={selectWorkflow}
         onCreateWorkflow={createWorkflow}
         onRun={runWorkflow}
-        onCloseProject={closeProject}
+        onMenuAction={handleTopBarMenuAction}
+        showMinimap={showMinimap}
+        rightOpen={rightOpen}
         status={status}
         canRun={Boolean(workflow)}
       />
@@ -1505,6 +1539,7 @@ export function App() {
             placingNodeId={placingNodeId}
             onPlacingMove={handlePlacingMove}
             onPlacingDrop={handlePlacingDrop}
+            showMinimap={showMinimap}
           />
         </section>
         {rightOpen && <ResizeHandle side="right" onResize={setRightWidth} min={280} max={520} />}

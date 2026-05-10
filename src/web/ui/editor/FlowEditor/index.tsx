@@ -63,6 +63,7 @@ export function FlowEditor({
   placingNodeId,
   onPlacingMove,
   onPlacingDrop,
+  showMinimap,
 }: {
   nodes: UiNode[];
   edges: UiEdge[];
@@ -79,10 +80,16 @@ export function FlowEditor({
   onNodeDragStopCheckFrames: (nodeId: string) => void;
   onPaneClickClear: () => void;
   onCommitFlow: () => void;
-  onFlowReady?: (api: { screenToFlowPosition: (p: { x: number; y: number }) => { x: number; y: number } }) => void;
+  onFlowReady?: (api: {
+    screenToFlowPosition: (p: { x: number; y: number }) => { x: number; y: number };
+    zoomIn: () => void;
+    zoomOut: () => void;
+    fitView: () => void;
+  }) => void;
   placingNodeId?: string | null;
   onPlacingMove?: (nodeId: string, position: { x: number; y: number }) => void;
   onPlacingDrop?: () => void;
+  showMinimap?: boolean;
 }) {
   const edgeReconnectSuccessful = useRef(true);
   const frameDragRef = useRef<{ id: string; position: { x: number; y: number } } | null>(null);
@@ -173,7 +180,12 @@ export function FlowEditor({
         onEdgesChange={handleEdgesChange}
         onInit={(instance) => {
           reactFlowRef.current = instance;
-          onFlowReady?.({ screenToFlowPosition: instance.screenToFlowPosition.bind(instance) });
+          onFlowReady?.({
+            screenToFlowPosition: instance.screenToFlowPosition.bind(instance),
+            zoomIn: instance.zoomIn.bind(instance),
+            zoomOut: instance.zoomOut.bind(instance),
+            fitView: instance.fitView.bind(instance),
+          });
         }}
         onConnect={handleConnect}
         onReconnect={handleReconnect}
@@ -262,12 +274,14 @@ export function FlowEditor({
         elevateNodesOnSelect={false}
       >
         <Background variant={BackgroundVariant.Dots} color="#5b6472" gap={24} size={1.35} />
-        <MiniMap
-          pannable
-          zoomable
-          nodeColor={(node) => nodeMeta[node.type as NodeType].accent}
-          maskColor="rgba(2, 6, 23, 0.72)"
-        />
+        {showMinimap !== false && (
+          <MiniMap
+            pannable
+            zoomable
+            nodeColor={(node) => nodeMeta[node.type as NodeType].accent}
+            maskColor="rgba(2, 6, 23, 0.72)"
+          />
+        )}
         <Controls position="top-left" />
       </ReactFlow>
     </section>
