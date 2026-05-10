@@ -4,8 +4,8 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
-  border-right: 1px solid rgba(148, 163, 184, 0.16);
-  background: #202020;
+  border-right: 1px solid var(--ui-border-default);
+  background: var(--ui-bg-surface);
 }
 
 .side-panel-inner {
@@ -17,10 +17,10 @@
 
 .side-panel-close {
   position: absolute;
-  top: 0.444rem;
-  right: 0.444rem;
+  top: var(--ui-space-3);
+  right: var(--ui-space-3);
   z-index: 2;
   width: 1.556rem;
   height: 1.556rem;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
 }

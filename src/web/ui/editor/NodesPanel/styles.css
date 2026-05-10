@@ -1,30 +1,30 @@
 .node-panel-list {
   display: grid;
   align-content: start;
-  gap: 0.222rem;
-  padding: 0 0.444rem;
+  gap: var(--ui-space-1);
+  padding: 0 var(--ui-space-3);
 }
 
 .node-panel-item {
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr);
   align-items: center;
-  gap: 0.556rem;
+  gap: var(--ui-space-4);
   min-height: 2.444rem;
   border: none;
-  border-radius: 10px;
-  padding: 0.333rem 0.444rem;
+  border-radius: var(--ui-radius-lg);
+  padding: var(--ui-space-2) var(--ui-space-3);
   background: transparent;
-  color: #cbd5e1;
+  color: var(--ui-text-secondary);
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s;
-  font-size: 0.722rem;
+  transition: background 0.15s, color 0.15s;
+  font-size: var(--ui-text-sm);
 }
 
 .node-panel-item:hover {
-  background: #2c2c2c;
-  color: #fff;
+  background: var(--ui-bg-hover);
+  color: var(--ui-text-primary);
 }
 
 .node-panel-icon {
@@ -32,19 +32,19 @@
   place-items: center;
   width: 2rem;
   height: 2rem;
-  border-radius: 8px;
+  border-radius: var(--ui-radius-lg);
   background: rgba(255, 255, 255, 0.05);
 }
 
 .node-panel-item strong {
   display: block;
-  font-size: 0.722rem;
+  font-size: var(--ui-text-sm);
   font-weight: 500;
-  color: #e4e4e7;
+  color: var(--ui-text-primary);
 }
 
 .node-panel-item small {
   display: block;
-  font-size: 0.611rem;
-  color: #a1a1aa;
+  font-size: var(--ui-text-xs);
+  color: var(--ui-text-muted);
 }

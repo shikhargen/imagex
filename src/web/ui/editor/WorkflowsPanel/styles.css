@@ -1,23 +1,25 @@
 .workflow-panel-list {
   display: grid;
   align-content: start;
-  gap: 0.222rem;
-  padding: 0 0.444rem;
+  gap: var(--ui-space-1);
+  padding: 0 var(--ui-space-3);
 }
 
 .workflow-row {
   display: grid;
   grid-template-columns: 1rem minmax(0, 1fr);
   align-items: center;
-  gap: 0.444rem;
+  gap: var(--ui-space-3);
   min-height: 1.889rem;
   border: 0;
-  border-radius: 12px;
-  padding: 0 0.444rem;
-  color: #cbd5e1;
+  border-radius: var(--ui-radius-lg);
+  padding: 0 var(--ui-space-3);
+  color: var(--ui-text-secondary);
   background: transparent;
   text-align: left;
-  font-size: 0.722rem;
+  font-size: var(--ui-text-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
 
 .workflow-row span {
@@ -28,6 +30,6 @@
 
 .workflow-row.active,
 .workflow-row:hover {
-  background: #343434;
-  color: #fff;
+  background: var(--ui-bg-active);
+  color: var(--ui-text-primary);
 }

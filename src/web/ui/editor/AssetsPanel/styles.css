@@ -1,39 +1,39 @@
 .asset-grid-compact {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0.444rem;
-  padding: 0 0.444rem;
+  gap: var(--ui-space-3);
+  padding: 0 var(--ui-space-3);
 }
 
 .asset-card-compact {
   display: grid;
-  gap: 0.222rem;
+  gap: var(--ui-space-1);
 }
 
 .asset-card-compact > button {
   display: grid;
-  gap: 0.222rem;
+  gap: var(--ui-space-1);
   border: none;
-  border-radius: 8px;
-  padding: 0.222rem;
+  border-radius: var(--ui-radius-lg);
+  padding: var(--ui-space-1);
   background: transparent;
-  color: #cbd5e1;
+  color: var(--ui-text-secondary);
   text-align: center;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .asset-card-compact > button:hover {
-  background: #2c2c2c;
+  background: var(--ui-bg-hover);
 }
 
 .asset-card-compact .asset-thumbnail {
   display: grid;
   place-items: center;
   aspect-ratio: 1;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
   overflow: hidden;
-  background: #1a1a1a;
+  background: var(--ui-bg-panel);
 }
 
 .asset-card-compact .asset-thumbnail img {
@@ -43,7 +43,7 @@
 }
 
 .asset-card-compact > button > span:last-child {
-  font-size: 0.722rem;
+  font-size: var(--ui-text-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -52,32 +52,32 @@
 .asset-node-list-compact {
   display: grid;
   align-content: start;
-  gap: 0.333rem;
-  padding: 0 0.444rem;
+  gap: var(--ui-space-2);
+  padding: 0 var(--ui-space-3);
 }
 
 .asset-node-list-compact .asset-node-card {
   display: grid;
   grid-template-columns: 2.222rem minmax(0, 1fr);
   align-items: center;
-  gap: 0.556rem;
-  padding: 0.444rem;
+  gap: var(--ui-space-4);
+  padding: var(--ui-space-3);
   border: none;
-  border-radius: 10px;
+  border-radius: var(--ui-radius-lg);
   background: transparent;
-  color: #cbd5e1;
+  color: var(--ui-text-secondary);
   text-align: left;
   cursor: pointer;
   transition: background 0.15s;
-  font-size: 0.722rem;
+  font-size: var(--ui-text-sm);
 }
 
 .asset-node-list-compact .asset-node-card:hover {
-  background: #2c2c2c;
+  background: var(--ui-bg-hover);
 }
 
 .asset-count {
   margin-left: auto;
-  color: #9da7b7;
-  font-size: 0.611rem;
+  color: var(--ui-text-muted);
+  font-size: var(--ui-text-xs);
 }

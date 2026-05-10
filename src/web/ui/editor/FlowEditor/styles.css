@@ -3,7 +3,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: #1d1d1d;
+  background: var(--ui-bg-panel);
 }
 
 .canvas .react-flow {
@@ -58,22 +58,22 @@
 
 .react-flow__controls {
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 12px;
-  background: #252525;
-  box-shadow: 0 0.778rem 1.889rem rgba(2, 6, 23, 0.36);
+  border: 1px solid var(--ui-border-default);
+  border-radius: var(--ui-radius-xl);
+  background: var(--ui-bg-overlay);
+  box-shadow: var(--ui-shadow-md);
 }
 
 .react-flow__controls-button {
   width: 1.778rem;
   height: 1.778rem;
-  border-bottom-color: rgba(148, 163, 184, 0.12);
+  border-bottom-color: var(--ui-border-subtle);
   background: transparent;
-  color: #cbd5e1;
+  color: var(--ui-text-secondary);
 }
 
 .react-flow__minimap {
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 12px;
-  background: #252525;
+  border: 1px solid var(--ui-border-default);
+  border-radius: var(--ui-radius-xl);
+  background: var(--ui-bg-overlay);
 }

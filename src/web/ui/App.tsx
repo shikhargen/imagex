@@ -1466,9 +1466,6 @@ export function App() {
         onSelectWorkflow={selectWorkflow}
         onCreateWorkflow={createWorkflow}
         onRun={runWorkflow}
-        onMenuAction={handleTopBarMenuAction}
-        showMinimap={showMinimap}
-        rightOpen={rightOpen}
         status={status}
         canRun={Boolean(workflow)}
       />
@@ -1488,6 +1485,9 @@ export function App() {
             if (id === 'settings') openSettingsRoute();
             if (id === 'shortcuts') setShowShortcuts(true);
           }}
+          onMenuAction={handleTopBarMenuAction}
+          showMinimap={showMinimap}
+          rightOpen={rightOpen}
         />
         {activeSidePanel && (
           <>

@@ -1,10 +1,10 @@
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 0.667rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-  background: #202020;
-  padding: 0.556rem 1rem;
+  gap: var(--ui-space-5);
+  border-bottom: 1px solid var(--ui-border-default);
+  background: var(--ui-bg-surface);
+  padding: var(--ui-space-4) 1rem;
 }
 
 .toolbar-spacer {
@@ -13,6 +13,6 @@
 
 .workflow-name {
   width: 14.444rem;
-  font-size: 0.833rem;
+  font-size: var(--ui-text-base);
   font-weight: 700;
 }

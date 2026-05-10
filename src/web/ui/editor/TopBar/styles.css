@@ -2,69 +2,32 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.667rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-  background: #202020;
-  padding: 0.444rem 0.778rem;
+  gap: var(--ui-space-5);
+  border-bottom: 1px solid var(--ui-border-default);
+  background: var(--ui-bg-surface);
+  padding: var(--ui-space-3) var(--ui-space-6);
   min-height: 2.667rem;
-}
-
-.top-bar-start {
-  display: flex;
-  align-items: center;
-  gap: 0.556rem;
-  position: relative;
-}
-
-.menu-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 10px;
-  background: rgba(20, 20, 20, 0.9);
-  color: #e4e4e7;
-  transition: border-color 0.2s, background 0.2s, transform 0.2s;
-}
-
-.menu-trigger:hover {
-  border-color: rgba(226, 232, 240, 0.5);
-  background: rgba(50, 50, 50, 0.9);
-  transform: translateY(-1px);
-}
-
-.menu-trigger.active {
-  border-color: rgba(250, 204, 21, 0.6);
-  box-shadow: 0 0 0 0.111rem rgba(250, 204, 21, 0.25);
-}
-
-.menu-brand {
-  font-size: 0.778rem;
-  font-weight: 700;
-  color: #e4e4e7;
-  letter-spacing: 0.02em;
 }
 
 .top-bar-tabs {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--ui-space-2);
   overflow: auto;
   min-width: 0;
+  margin-right: auto;
 }
 
 .top-bar-tab {
   display: flex;
   align-items: center;
-  gap: 0.333rem;
-  padding: 0.333rem 0.667rem;
+  gap: var(--ui-space-2);
+  padding: var(--ui-space-2) var(--ui-space-5);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
   background: transparent;
-  color: #a1a1aa;
-  font-size: 0.722rem;
+  color: var(--ui-text-muted);
+  font-size: var(--ui-text-sm);
   white-space: nowrap;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -72,110 +35,32 @@
 }
 
 .top-bar-tab:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e4e4e7;
+  background: var(--ui-bg-hover);
+  color: var(--ui-text-primary);
 }
 
 .top-bar-tab.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e4e4e7;
+  background: var(--ui-bg-active);
+  color: var(--ui-text-primary);
 }
 
 .top-bar-tab-add {
-  padding: 0.333rem;
-  color: #a1a1aa;
+  padding: var(--ui-space-2);
+  color: var(--ui-text-muted);
   min-width: 1rem;
 }
 
 .top-bar-actions {
   display: flex;
   align-items: center;
-  gap: 0.444rem;
+  gap: var(--ui-space-3);
   flex-shrink: 0;
 }
 
 .top-bar-status {
-  color: #71717a;
-  font-size: 0.667rem;
+  color: var(--ui-text-dim);
+  font-size: var(--ui-text-xs);
   white-space: nowrap;
-}
-
-.menu-shell {
-  position: absolute;
-  top: calc(100% + 0.444rem);
-  left: 0;
-  min-width: 12.222rem;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 8px;
-  background: #18181b;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  z-index: 40;
-  animation: menu-pop 0.16s ease-out;
-}
-
-.menu-list {
-  display: flex;
-  flex-direction: column;
-  padding: 0.333rem;
-}
-
-.menu-separator {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.08);
-  margin: 0.222rem 0;
-}
-
-.menu-item-container {
-  position: relative;
-}
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 0.389rem 0.667rem;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: #d4d4d8;
-  font-size: 0.722rem;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.menu-item:hover,
-.menu-item.active {
-  background: rgba(255, 255, 255, 0.06);
-  color: #f8fafc;
-}
-
-.menu-submenu {
-  position: absolute;
-  top: -0.333rem;
-  left: calc(100% + 0.333rem);
-  display: flex;
-  flex-direction: column;
-  min-width: 12.222rem;
-  padding: 0.333rem;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 8px;
-  background: #18181b;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  z-index: 50;
-  animation: menu-pop 0.16s ease-out;
-}
-
-@keyframes menu-pop {
-  from {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 
 @media (max-width: 860px) {
@@ -184,17 +69,8 @@
     align-items: flex-start;
   }
 
-  .top-bar-start {
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .top-bar-tabs {
     order: 3;
     width: 100%;
-  }
-
-  .menu-shell {
-    min-width: 14rem;
   }
 }

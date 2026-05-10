@@ -13,7 +13,58 @@
   font-size: calc(18px * var(--font-scale, 1));
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --background: oklch(1 0 0);
+
+  /* Custom UI System Variables */
+  --ui-bg-base: #131313;
+  --ui-bg-panel: #18181b;
+  --ui-bg-surface: #202020;
+  --ui-bg-overlay: #252525;
+  --ui-bg-hover: rgba(255, 255, 255, 0.06);
+  --ui-bg-active: rgba(255, 255, 255, 0.1);
+  --ui-bg-accent: rgba(99, 102, 241, 0.2);
+  
+  --ui-border-subtle: rgba(148, 163, 184, 0.08);
+  --ui-border-default: rgba(148, 163, 184, 0.16);
+  --ui-border-strong: rgba(148, 163, 184, 0.24);
+  --ui-border-accent: rgba(250, 204, 21, 0.6);
+  
+  --ui-text-primary: #f8fafc;
+  --ui-text-secondary: #d4d4d8;
+  --ui-text-muted: #a1a1aa;
+  --ui-text-dim: #71717a;
+  --ui-text-inverse: #f4f4f5;
+  --ui-text-subtle: #cbd5e1;
+  --ui-text-faint: #a8b3c4;
+  
+  --ui-color-danger: #ff8c8c;
+  --ui-color-danger-bg: #991b1b;
+  --ui-color-danger-border: #7f1d1d;
+  
+  --ui-text-xs: 0.667rem;
+  --ui-text-sm: 0.722rem;
+  --ui-text-base: 0.833rem;
+  --ui-text-lg: 1rem;
+  --ui-text-xl: 1.222rem;
+  
+  --ui-space-1: 0.222rem;
+  --ui-space-2: 0.333rem;
+  --ui-space-3: 0.444rem;
+  --ui-space-4: 0.556rem;
+  --ui-space-5: 0.667rem;
+  --ui-space-6: 0.778rem;
+  --ui-space-7: 0.889rem;
+  --ui-space-8: 1.111rem;
+  
+  --ui-radius-sm: 4px;
+  --ui-radius-md: 6px;
+  --ui-radius-lg: 8px;
+  --ui-radius-xl: 12px;
+  
+  --ui-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
+  --ui-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --ui-shadow-lg: 0 0.556rem 1.556rem rgba(0, 0, 0, 0.5);
+
+  /* Shadcn light defaults */
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -75,7 +126,7 @@ button {
   grid-template-rows: auto 1fr;
   height: 100vh;
   overflow: hidden;
-  background: #191919;
+  background: var(--ui-bg-base);
 }
 
 .app-body {
@@ -119,12 +170,14 @@ button {
 .resize-handle {
   position: relative;
   z-index: 3;
-  background: #141414;
+  background: var(--ui-bg-panel);
   cursor: col-resize;
+  border-left: 1px solid var(--ui-border-default);
+  border-right: 1px solid var(--ui-border-default);
 }
 
 .resize-handle:hover {
-  background: #3a3a3a;
+  background: var(--ui-bg-hover);
 }
 
 .brand {
@@ -144,7 +197,7 @@ button {
   height: 1.556rem;
   border-radius: 10px;
   color: white;
-  background: #5b5b5b;
+  background: var(--ui-text-dim);
   font-size: 0.889rem;
   line-height: 1;
 }
@@ -166,11 +219,11 @@ button {
 /* ------------------------------------------------------------------ */
 
 kbd {
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 10px;
+  border: 1px solid var(--ui-border-default);
+  border-radius: var(--ui-radius-lg);
   padding: 0.25rem 0.5rem;
   background: rgba(30, 41, 59, 0.9);
-  color: #cbd5e1;
+  color: var(--ui-text-subtle);
   width: fit-content;
   font-size: 0.8rem;
 }
@@ -184,23 +237,23 @@ kbd {
   border: 1px solid rgba(245, 158, 11, 0.35);
   color: #fbbf24;
   border-radius: 999px;
-  padding: 0 0.556rem;
+  padding: 0 var(--ui-space-4);
   background: rgba(120, 53, 15, 0.18);
-  font-size: 0.667rem;
+  font-size: var(--ui-text-xs);
   white-space: nowrap;
 }
 
 .connection-pill,
 .auth-pill.ok {
-  border-color: #3a3a3a;
+  border-color: var(--ui-border-default);
   color: #b9e3bd;
   background: #242b24;
 }
 
 
 .muted {
-  margin: 0.889rem;
-  color: #94a3b8;
+  margin: var(--ui-space-7);
+  color: var(--ui-text-muted);
 }
 
 .muted.inline {
