@@ -132,7 +132,7 @@ button {
   align-items: center;
   gap: 0.556rem;
   padding: 0.222rem 0.444rem;
-  font-size: 22px;
+  font-size: 1.222rem;
   font-weight: 800;
   letter-spacing: 0;
 }
@@ -145,7 +145,7 @@ button {
   border-radius: 10px;
   color: white;
   background: #5b5b5b;
-  font-size: 16px;
+  font-size: 0.889rem;
   line-height: 1;
 }
 
@@ -186,7 +186,7 @@ kbd {
   border-radius: 999px;
   padding: 0 0.556rem;
   background: rgba(120, 53, 15, 0.18);
-  font-size: 12px;
+  font-size: 0.667rem;
   white-space: nowrap;
 }
 

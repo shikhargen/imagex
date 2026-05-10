@@ -12,16 +12,14 @@ export function AssetsPanel({
   onImport,
   onAddImageAsset,
   onAddNodeAsset,
-  onRename,
-  onDelete,
+  onMenu,
 }: {
   assets: ImageXAsset[];
   nodeAssets: ImageXNodeAsset[];
   onImport: (files: FileList | null) => void;
   onAddImageAsset: (asset: ImageXAsset) => void;
   onAddNodeAsset: (asset: ImageXNodeAsset) => void;
-  onRename: (assetId: string) => void;
-  onDelete: (assetId: string) => void;
+  onMenu: (assetId: string, position: { x: number; y: number }) => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [tab, setTab] = useState<'images' | 'nodes'>('images');
@@ -75,21 +73,20 @@ export function AssetsPanel({
           />
           <div className="asset-grid-compact">
             {filteredAssets.map((asset) => (
-              <article key={asset.id} className="asset-card-compact">
+              <article
+                key={asset.id}
+                className="asset-card-compact"
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  onMenu(asset.id, { x: event.clientX, y: event.clientY });
+                }}
+              >
                 <button type="button" onClick={() => onAddImageAsset(asset)}>
                   <span className="asset-thumbnail">
                     <img src={asset.url} alt={asset.name} loading="lazy" />
                   </span>
                   <span>{asset.name}</span>
                 </button>
-                <div>
-                  <Button variant="ghost" size="sm" onClick={() => onRename(asset.id)}>
-                    Rename
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => onDelete(asset.id)}>
-                    Delete
-                  </Button>
-                </div>
               </article>
             ))}
             {filteredAssets.length === 0 && <p className="muted">No image assets match.</p>}

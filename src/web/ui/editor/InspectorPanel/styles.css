@@ -23,7 +23,7 @@
   writing-mode: vertical-rl;
   text-orientation: mixed;
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 0.667rem;
   letter-spacing: 0;
 }
 
@@ -40,13 +40,13 @@
 .panel-header h2 {
   margin: 0;
   color: #f8fafc;
-  font-size: 16px;
+  font-size: 0.889rem;
 }
 
 .panel-header p {
   margin: 0.167rem 0 0;
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 0.667rem;
 }
 
 .inspector-fields {
@@ -67,14 +67,14 @@
 
 .inspector-title span {
   color: var(--node-accent);
-  font-size: 11px;
+  font-size: 0.611rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .inspector-title strong {
   color: #e5e7eb;
-  font-size: 13px;
+  font-size: 0.722rem;
 }
 
 .inspector .ix-field {
@@ -92,7 +92,7 @@
 .inspector-output h2 {
   margin: 0;
   color: #e5e5e5;
-  font-size: 13px;
+  font-size: 0.722rem;
 }
 
 .inspector-output img {

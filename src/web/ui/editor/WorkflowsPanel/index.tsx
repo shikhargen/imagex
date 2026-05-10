@@ -43,23 +43,25 @@ export function WorkflowsPanel({
         </Button>
       }
     >
-      {filtered.map((workflow) => (
-        <button
-          key={workflow.id}
-          type="button"
-          className={`workflow-row ${workflow.id === activeWorkflowId ? 'active' : ''}`}
-          onClick={() => onSelect(workflow.id)}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            onMenu(workflow.id, { x: event.clientX, y: event.clientY });
-          }}
-          title={workflow.title}
-        >
-          <FilePlus2 size={15} />
-          <span>{workflow.title}</span>
-        </button>
-      ))}
-      {filtered.length === 0 && <p className="muted">No workflows match.</p>}
+      <div className="workflow-panel-list">
+        {filtered.map((workflow) => (
+          <button
+            key={workflow.id}
+            type="button"
+            className={`workflow-row ${workflow.id === activeWorkflowId ? 'active' : ''}`}
+            onClick={() => onSelect(workflow.id)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onMenu(workflow.id, { x: event.clientX, y: event.clientY });
+            }}
+            title={workflow.title}
+          >
+            <FilePlus2 size={15} />
+            <span>{workflow.title}</span>
+          </button>
+        ))}
+        {filtered.length === 0 && <p className="muted">No workflows match.</p>}
+      </div>
     </PanelShell>
   );
 }

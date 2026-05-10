@@ -26,7 +26,7 @@
   border-radius: 6px;
   background: transparent;
   color: #a1a1aa;
-  font-size: 13px;
+  font-size: 0.722rem;
   white-space: nowrap;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -58,6 +58,6 @@
 
 .top-bar-status {
   color: #71717a;
-  font-size: 12px;
+  font-size: 0.667rem;
   white-space: nowrap;
 }

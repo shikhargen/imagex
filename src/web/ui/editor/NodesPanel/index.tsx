@@ -30,26 +30,28 @@ export function NodesPanel({
       searchValue={query}
       onSearch={setQuery}
     >
-      {filtered.map((item) => {
-        const Icon = item.icon;
-        return (
-          <button
-            key={item.type}
-            type="button"
-            className="node-panel-item"
-            onClick={() => onAdd(item.type)}
-          >
-            <span className="node-panel-icon" style={{ color: nodeMeta[item.type].accent }}>
-              <Icon size={18} />
-            </span>
-            <div>
-              <strong>{item.label}</strong>
-              <small>{item.description}</small>
-            </div>
-          </button>
-        );
-      })}
-      {filtered.length === 0 && <p className="muted">No nodes match.</p>}
+      <div className="node-panel-list">
+        {filtered.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.type}
+              type="button"
+              className="node-panel-item"
+              onClick={() => onAdd(item.type)}
+            >
+              <span className="node-panel-icon" style={{ color: nodeMeta[item.type].accent }}>
+                <Icon size={18} />
+              </span>
+              <div>
+                <strong>{item.label}</strong>
+                <small>{item.description}</small>
+              </div>
+            </button>
+          );
+        })}
+        {filtered.length === 0 && <p className="muted">No nodes match.</p>}
+      </div>
     </PanelShell>
   );
 }

@@ -20,7 +20,7 @@
 
 .dashboard-header h1 {
   margin: 1.778rem 0 0.444rem;
-  font-size: 34px;
+  font-size: 1.889rem;
   line-height: 1;
 }
 
@@ -55,7 +55,7 @@
 }
 
 .project-card strong {
-  font-size: 18px;
+  font-size: 1rem;
 }
 
 .project-card span,
@@ -71,7 +71,7 @@
   white-space: nowrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     'Liberation Mono', monospace;
-  font-size: 11px;
+  font-size: 0.611rem;
 }
 
 .empty-dashboard {
@@ -423,7 +423,7 @@
 
 .settings-modal h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 0.833rem;
 }
 
 .settings-content,
@@ -457,7 +457,7 @@
 .settings-status span,
 .settings-row span {
   color: #9da7b7;
-  font-size: 12px;
+  font-size: 0.667rem;
 }
 
 .settings-row {
@@ -486,7 +486,7 @@
 
 .new-project-modal h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 0.833rem;
 }
 
 .new-project-form {
@@ -500,7 +500,7 @@
   display: grid;
   gap: 0.333rem;
   color: #cbd5e1;
-  font-size: 13px;
+  font-size: 0.722rem;
 }
 
 .template-picker {
@@ -521,7 +521,7 @@
 
 .template-picker span {
   color: #a8b3c4;
-  font-size: 12px;
+  font-size: 0.667rem;
 }
 
 .prompt-overlay header {
@@ -534,7 +534,7 @@
 
 .prompt-overlay h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 0.833rem;
 }
 
 .node-menu {

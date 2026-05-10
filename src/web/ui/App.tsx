@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
-import { Box, Component, FileText, Frame, Image, Layers3, MapPin, Palette, UserRound } from 'lucide-react';
+import { Box, Component, FileText, Frame, Image, Layers3, MapPin, Palette, UserRound, X } from 'lucide-react';
 import type {
   CustomFieldDefinition,
   CustomFieldKind,
@@ -74,6 +74,7 @@ type FloatingMenu =
   | { type: 'pane'; x: number; y: number; flowX: number; flowY: number }
   | { type: 'workflow'; workflowId: string; x: number; y: number }
   | { type: 'project'; projectId: string; x: number; y: number }
+  | { type: 'asset'; assetId: string; x: number; y: number }
   | null;
 
 type TextDialogState =
@@ -786,6 +787,11 @@ export function App() {
       if (action === 'delete') deleteWorkflow(menuState.workflowId);
       return;
     }
+    if (menuState.type === 'asset') {
+      if (action === 'rename') renameAsset(menuState.assetId);
+      if (action === 'delete') deleteAsset(menuState.assetId);
+      return;
+    }
     if (menuState.type === 'project') {
       if (action === 'open') void openProject(menuState.projectId);
       if (action === 'rename') renameProjectFromMenu(menuState.projectId);
@@ -951,6 +957,17 @@ export function App() {
     const nextWorkflow = { ...(syncLatestWorkflow() || syncFlowToWorkflow(workflow, nodesRef.current, edgesRef.current)), name };
     workflowRef.current = nextWorkflow;
     setWorkflow(nextWorkflow);
+    // Update project metadata so sidebar workflow list refreshes immediately
+    setProject((current) => {
+      if (!current) return current;
+      const nextMetadata = { ...current.metadata };
+      if (nextMetadata.workflows?.length) {
+        nextMetadata.workflows = nextMetadata.workflows.map((w) =>
+          w.id === workflow.id ? { ...w, title: name } : w
+        );
+      }
+      return { ...current, metadata: nextMetadata, workflow: { ...current.workflow, name } };
+    });
   }
 
   function addNode(type: Parameters<typeof createUiWorkflowNode>[0], position?: { x: number; y: number }) {
@@ -1460,8 +1477,7 @@ export function App() {
                   onImport={importAssets}
                   onAddImageAsset={addImageAssetNode}
                   onAddNodeAsset={addNodeAsset}
-                  onRename={renameAsset}
-                  onDelete={deleteAsset}
+                  onMenu={(assetId, position) => setMenu({ type: 'asset', assetId, x: position.x, y: position.y })}
                 />
               )}
             </SidePanel>
@@ -1530,8 +1546,7 @@ export function App() {
           assets={assets}
           onImport={importAssets}
           onSelect={selectAssetForField}
-          onRename={renameAsset}
-          onDelete={deleteAsset}
+          onMenu={(assetId, position) => setMenu({ type: 'asset', assetId, x: position.x, y: position.y })}
           onClose={() => setAssetPicker(null)}
         />
       )}
@@ -1635,6 +1650,11 @@ function FloatingContextMenu({
             ['rename', 'Rename'],
             ['delete', 'Delete'],
           ]
+        : menu.type === 'asset'
+          ? [
+              ['rename', 'Rename'],
+              ['delete', 'Delete'],
+            ]
         : menu.type === 'project'
           ? [
               ['open', 'Open'],
@@ -1719,7 +1739,7 @@ function NewProjectModal({
       <section className="new-project-modal">
         <header>
           <h2>New Project</h2>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X size={16} /></Button>
         </header>
         <div className="new-project-form">
           <label>
@@ -1789,9 +1809,7 @@ function TextInputDialog({
             <Input value={value} onChange={(event) => setValue(event.target.value)} autoFocus />
           </label>
           <div className="dialog-actions">
-            <Button variant="outline" type="button" onClick={onCancel}>
-              Cancel
-            </Button>
+            <Button variant="ghost" size="icon" type="button" onClick={onCancel} aria-label="Cancel"><X size={16} /></Button>
             <Button type="submit" disabled={!canSubmit}>
               Save
             </Button>
@@ -1825,9 +1843,7 @@ function ConfirmDialog({
           </header>
           <p className="dialog-message">{message}</p>
           <div className="dialog-actions">
-            <Button variant="outline" type="button" onClick={onCancel}>
-              Cancel
-            </Button>
+            <Button variant="ghost" size="icon" type="button" onClick={onCancel} aria-label="Cancel"><X size={16} /></Button>
             <Button className="danger" type="button" onClick={onConfirm}>
               {confirmLabel}
             </Button>
@@ -1853,15 +1869,13 @@ function AssetsModal({
   assets,
   onImport,
   onSelect,
-  onRename,
-  onDelete,
+  onMenu,
   onClose,
 }: {
   assets: ImageXAsset[];
   onImport: (files: FileList | null) => void;
   onSelect: (asset: ImageXAsset) => void;
-  onRename: (assetId: string) => void;
-  onDelete: (assetId: string) => void;
+  onMenu: (assetId: string, position: { x: number; y: number }) => void;
   onClose: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -1876,7 +1890,7 @@ function AssetsModal({
           </div>
           <div className="modal-actions">
             <Button variant="secondary" onClick={() => inputRef.current?.click()}>Import Images</Button>
-            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X size={16} /></Button>
           </div>
           <input
             ref={inputRef}
@@ -1897,17 +1911,20 @@ function AssetsModal({
           </aside>
           <div className="asset-grid">
             {assets.map((asset) => (
-              <article key={asset.id} className="asset-card">
+              <article
+                key={asset.id}
+                className="asset-card"
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  onMenu(asset.id, { x: event.clientX, y: event.clientY });
+                }}
+              >
                 <button type="button" onClick={() => onSelect(asset)}>
                   <span className="asset-thumbnail">
                     <img src={asset.url} alt={asset.name} loading="lazy" />
                   </span>
                   <span>{asset.name}</span>
                 </button>
-                <div>
-                  <Button variant="ghost" size="sm" onClick={() => onRename(asset.id)}>Rename</Button>
-                  <Button variant="ghost" size="sm" onClick={() => onDelete(asset.id)}>Delete</Button>
-                </div>
               </article>
             ))}
             {assets.length === 0 && <p className="muted">No image assets in this project yet.</p>}
@@ -1943,7 +1960,7 @@ function SettingsModal({
       <section className="settings-modal">
         <header>
           <h2>Settings</h2>
-          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X size={16} /></Button>
         </header>
         <div className="settings-content">
           <section className="settings-status">
@@ -1989,7 +2006,7 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
       <section className="settings-modal shortcuts-modal">
         <header>
           <h2>Shortcuts</h2>
-          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X size={16} /></Button>
         </header>
         <div className="shortcut-list">
           {editorShortcuts.map((shortcut) => (
@@ -2011,7 +2028,7 @@ function PromptOverlay({ prompt, onClose }: { prompt: string; onClose: () => voi
       <section className="prompt-overlay">
         <header>
           <h2>Compiled Prompt</h2>
-          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X size={16} /></Button>
         </header>
         {formatted ? <JsonCodeBlock code={formatted} /> : <div className="empty-preview">No prompt generated</div>}
       </section>

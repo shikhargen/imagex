@@ -575,7 +575,7 @@
   border-radius: 12px;
   color: #c4c4c4;
   background: #2a2a2a;
-  font-size: 11px;
+  font-size: 0.611rem;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
 
@@ -628,7 +628,7 @@
   padding: 0.167rem 0.333rem;
   color: #c4c4c4;
   background: rgba(30, 30, 30, 0.92);
-  font-size: 11px;
+  font-size: 0.611rem;
   font-weight: 500;
   backdrop-filter: blur(4px);
   transition: border-color 0.12s ease, color 0.12s ease;
