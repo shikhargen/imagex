@@ -15,14 +15,17 @@ import type {
   NodeType,
   OutputNodeResult,
 } from '../../shared/types.js';
-import { AssetsPanel } from './editor/AssetsPanel.js';
-import { FlowEditor } from './editor/FlowEditor.js';
-import { InspectorPanel, InspectorToggle } from './editor/InspectorPanel.js';
-import { NodesPanel } from './editor/NodesPanel.js';
-import { Sidebar } from './editor/Sidebar.js';
-import { SidePanel } from './editor/SidePanel.js';
-import { TopBar } from './editor/TopBar.js';
-import { WorkflowsPanel } from './editor/WorkflowsPanel.js';
+import './App.css';
+import { BottomNotification } from './notifications/index.js';
+import { JsonCodeBlock } from './components/JsonCodeBlock/index.js';
+import { AssetsPanel } from './editor/AssetsPanel/index.js';
+import { FlowEditor } from './editor/FlowEditor/index.js';
+import { InspectorPanel, InspectorToggle } from './editor/InspectorPanel/index.js';
+import { NodesPanel } from './editor/NodesPanel/index.js';
+import { Sidebar } from './editor/Sidebar/index.js';
+import { SidePanel } from './editor/SidePanel/index.js';
+import { TopBar } from './editor/TopBar/index.js';
+import { WorkflowsPanel } from './editor/WorkflowsPanel/index.js';
 import { createUiWorkflowNode, syncFlowToWorkflow, workflowToFlow } from './flow/adapters.js';
 import { nodeMeta } from './flow/meta.js';
 import type { UiEdge, UiNode } from './flow/types.js';
@@ -1835,17 +1838,6 @@ function ConfirmDialog({
   );
 }
 
-function BottomNotification({ message, onClose }: { message: string; onClose: () => void }) {
-  return (
-    <div className="bottom-notification" role="status">
-      <span>{message}</span>
-      <Button variant="outline" size="sm" type="button" onClick={onClose} aria-label="Dismiss notification">
-        Dismiss
-      </Button>
-    </div>
-  );
-}
-
 const nodeChoices: Array<{ type: NodeType; label: string; description: string; icon: ComponentType<{ size?: number }> }> = [
   { type: 'text', label: 'Text', description: 'Prompt text fragment', icon: FileText },
   { type: 'character', label: 'Character', description: 'Identity, outfit, mood', icon: UserRound },
@@ -2027,20 +2019,6 @@ function PromptOverlay({ prompt, onClose }: { prompt: string; onClose: () => voi
   );
 }
 
-function JsonCodeBlock({ code }: { code: string }) {
-  const lines = code.split('\n');
-  return (
-    <div className="json-code" role="region" aria-label="Compiled prompt JSON">
-      {lines.map((line, index) => (
-        <div className="json-code-line" key={`${index}-${line}`}>
-          <span className="json-line-number">{index + 1}</span>
-          <code>{highlightJsonLine(line)}</code>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function formatJsonPrompt(prompt: string): string {
   try {
     return JSON.stringify(JSON.parse(prompt), null, 2);
@@ -2052,24 +2030,6 @@ function formatJsonPrompt(prompt: string): string {
 function clampHistoryLimit(value: number): number {
   if (!Number.isFinite(value)) return 50;
   return Math.max(10, Math.min(200, Math.round(value)));
-}
-
-function highlightJsonLine(line: string): ReactNode[] {
-  const tokens = line.split(/("(?:\\.|[^"\\])*"\s*:|"(?:\\.|[^"\\])*"|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}[\],])/g);
-  return tokens.filter(Boolean).map((token, index) => {
-    let className = 'json-token';
-    if (/^"(?:\\.|[^"\\])*"\s*:$/.test(token)) className += ' key';
-    else if (/^"(?:\\.|[^"\\])*"$/.test(token)) className += ' string';
-    else if (/^-?\d/.test(token)) className += ' number';
-    else if (/^(true|false)$/.test(token)) className += ' boolean';
-    else if (token === 'null') className += ' null';
-    else if (/^[{}[\],]$/.test(token)) className += ' punctuation';
-    return (
-      <span className={className} key={`${index}-${token}`}>
-        {token}
-      </span>
-    );
-  });
 }
 
 function pushProjectRoute(project: ImageXProject) {

@@ -1,0 +1,61 @@
+.json-code {
+  overflow: auto;
+  padding: 0.667rem 0;
+  color: #d4d4d4;
+  background: #1e1e1e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.json-code-line {
+  display: grid;
+  grid-template-columns: 3.111rem max-content;
+  min-height: 1.111rem;
+}
+
+.json-code-line:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.json-line-number {
+  position: sticky;
+  left: 0;
+  user-select: none;
+  padding: 0 0.778rem 0 0.667rem;
+  color: #6e7681;
+  background: #1e1e1e;
+  text-align: right;
+}
+
+.json-code code {
+  display: block;
+  white-space: pre;
+  padding-right: 1rem;
+}
+
+.json-token.key {
+  color: #9cdcfe;
+}
+
+.json-token.string {
+  color: #ce9178;
+}
+
+.json-token.number {
+  color: #b5cea8;
+}
+
+.json-token.boolean {
+  color: #569cd6;
+}
+
+.json-token.null {
+  color: #c586c0;
+}
+
+.json-token.punctuation {
+  color: #d4d4d4;
+}

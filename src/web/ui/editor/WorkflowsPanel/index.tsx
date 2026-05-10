@@ -1,6 +1,7 @@
 import { FilePlus2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { PanelShell } from './PanelShell.js';
+import { PanelShell } from '../PanelShell/index.js';
+import './styles.css';
 
 export type SidebarWorkflow = {
   id: string;

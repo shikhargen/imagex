@@ -1,0 +1,58 @@
+/*  Thin sidebar                                                      */
+/* ------------------------------------------------------------------ */
+
+.thin-sidebar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.444rem;
+  padding: 0.667rem 0.333rem;
+  border-right: 1px solid rgba(148, 163, 184, 0.16);
+  background: #202020;
+  overflow: hidden;
+}
+
+.thin-sidebar-top,
+.thin-sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.222rem;
+  width: 100%;
+}
+
+.thin-sidebar-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.222rem;
+  width: 100%;
+  min-height: 3.333rem;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: #a1a1aa;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.thin-sidebar-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e4e4e7;
+}
+
+.thin-sidebar-btn.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e4e4e7;
+}
+
+.thin-sidebar-btn span {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}

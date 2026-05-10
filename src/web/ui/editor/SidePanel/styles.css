@@ -1,0 +1,26 @@
+.side-panel {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  border-right: 1px solid rgba(148, 163, 184, 0.16);
+  background: #202020;
+}
+
+.side-panel-inner {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  position: relative;
+}
+
+.side-panel-close {
+  position: absolute;
+  top: 0.444rem;
+  right: 0.444rem;
+  z-index: 2;
+  width: 1.556rem;
+  height: 1.556rem;
+  border-radius: 6px;
+}

@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
 import { Image, Layers3, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { ImageXAsset, ImageXNodeAsset } from '../../../shared/types.js';
-import { nodeMeta } from '../flow/meta.js';
-import { PanelShell } from './PanelShell.js';
+import type { ImageXAsset, ImageXNodeAsset } from '../../../../shared/types.js';
+import { nodeMeta } from '../../flow/meta.js';
+import { PanelShell } from '../PanelShell/index.js';
+import './styles.css';
 
 export function AssetsPanel({
   assets,

@@ -1,0 +1,79 @@
+.canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #1d1d1d;
+}
+
+.canvas .react-flow {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.react-flow__node {
+  cursor: grab;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.react-flow__node:not(.react-flow__node-frame) {
+  z-index: 10 !important;
+}
+
+.react-flow__node.selected {
+  z-index: 20 !important;
+}
+
+.react-flow__node-frame,
+.react-flow__node-frame.selected {
+  z-index: 0 !important;
+}
+
+.react-flow__node-frame.selected {
+  pointer-events: auto;
+}
+
+.react-flow__node-frame.selected
+  ~ .react-flow__node:not(.react-flow__node-frame),
+.react-flow__node:not(.react-flow__node-frame) {
+  opacity: 1 !important;
+}
+
+.react-flow__edge {
+  pointer-events: visibleStroke;
+}
+
+.react-flow__node.selected::before,
+.react-flow__node.selected::after {
+  display: none !important;
+}
+
+.react-flow__edge-path {
+  filter: none;
+}
+
+.react-flow__controls {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: #252525;
+  box-shadow: 0 0.778rem 1.889rem rgba(2, 6, 23, 0.36);
+}
+
+.react-flow__controls-button {
+  width: 1.778rem;
+  height: 1.778rem;
+  border-bottom-color: rgba(148, 163, 184, 0.12);
+  background: transparent;
+  color: #cbd5e1;
+}
+
+.react-flow__minimap {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: #252525;
+}

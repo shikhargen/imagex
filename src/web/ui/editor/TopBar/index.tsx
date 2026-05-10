@@ -1,5 +1,6 @@
 import { LogOut, Play, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import './styles.css';
 
 export type TopBarWorkflow = {
   id: string;

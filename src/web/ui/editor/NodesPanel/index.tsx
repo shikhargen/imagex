@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import type { NodeType } from '../../../shared/types.js';
-import { nodeMeta } from '../flow/meta.js';
-import { PanelShell } from './PanelShell.js';
+import type { NodeType } from '../../../../shared/types.js';
+import { nodeMeta } from '../../flow/meta.js';
+import { PanelShell } from '../PanelShell/index.js';
+import './styles.css';
 
 const nodeChoices = Object.entries(nodeMeta).map(([type, meta]) => ({
   type: type as NodeType,

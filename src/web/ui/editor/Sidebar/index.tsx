@@ -6,6 +6,7 @@ import {
   Layers3,
   Settings,
 } from 'lucide-react';
+import './styles.css';
 
 export type SidebarItem = {
   id: string;

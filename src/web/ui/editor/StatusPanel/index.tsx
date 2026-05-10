@@ -1,5 +1,5 @@
 import { Activity, Clock, Images } from 'lucide-react';
-import type { OutputNodeResult } from '../../../shared/types.js';
+import type { OutputNodeResult } from '../../../../shared/types.js';
 
 export function StatusPanel({
   status,

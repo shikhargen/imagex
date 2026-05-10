@@ -1,6 +1,7 @@
 import { ChevronDown, Download, LogOut, Plus, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import './styles.css';
 
 export function Toolbar({
   workflowName,

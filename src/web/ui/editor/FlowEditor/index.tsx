@@ -15,11 +15,12 @@ import {
   SelectionMode,
   type ReactFlowInstance,
 } from '@xyflow/react';
+import './styles.css';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import type { NodeType } from '../../../shared/types.js';
-import { nodeMeta } from '../flow/meta.js';
-import { isCompatibleConnection, portLabel } from '../flow/ports.js';
-import type { UiEdge, UiNode } from '../flow/types.js';
+import type { NodeType } from '../../../../shared/types.js';
+import { nodeMeta } from '../../flow/meta.js';
+import { isCompatibleConnection, portLabel } from '../../flow/ports.js';
+import type { UiEdge, UiNode } from '../../flow/types.js';
 import {
   CharacterNode,
   CustomNode,
@@ -29,7 +30,7 @@ import {
   SceneNode,
   StyleNode,
   TextNode,
-} from '../flow/nodes/ImageXNode.js';
+} from '../../flow/nodes/ImageXNode.js';
 
 const nodeTypes = {
   text: TextNode,

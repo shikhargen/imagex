@@ -1,0 +1,97 @@
+.asset-panel-body {
+  overflow: auto;
+  min-height: 0;
+}
+
+.asset-grid-compact {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.444rem;
+}
+
+.asset-card-compact {
+  display: grid;
+  gap: 0.222rem;
+}
+
+.asset-card-compact > button {
+  display: grid;
+  gap: 0.222rem;
+  border: none;
+  border-radius: 8px;
+  padding: 0.222rem;
+  background: transparent;
+  color: #cbd5e1;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.asset-card-compact > button:hover {
+  background: #2c2c2c;
+}
+
+.asset-card-compact .asset-thumbnail {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #1a1a1a;
+}
+
+.asset-card-compact .asset-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.asset-card-compact > button > span:last-child {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-card-compact > div {
+  display: flex;
+  justify-content: center;
+  gap: 0.111rem;
+}
+
+.asset-card-compact > div button {
+  font-size: 10px;
+  padding: 0.111rem 0.333rem;
+  height: auto;
+}
+
+.asset-node-list-compact {
+  display: grid;
+  align-content: start;
+  gap: 0.333rem;
+}
+
+.asset-node-list-compact .asset-node-card {
+  display: grid;
+  grid-template-columns: 2.222rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.556rem;
+  padding: 0.444rem 0.556rem;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #cbd5e1;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.asset-node-list-compact .asset-node-card:hover {
+  background: #2c2c2c;
+}
+
+.asset-count {
+  margin-left: auto;
+  color: #9da7b7;
+  font-size: 0.75rem;
+}

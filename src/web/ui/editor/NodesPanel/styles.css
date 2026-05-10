@@ -1,0 +1,48 @@
+.node-panel-list {
+  display: grid;
+  align-content: start;
+  gap: 0.222rem;
+}
+
+.node-panel-item {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.556rem;
+  min-height: 2.444rem;
+  border: none;
+  border-radius: 10px;
+  padding: 0.333rem 0.556rem;
+  background: transparent;
+  color: #cbd5e1;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.node-panel-item:hover {
+  background: #2c2c2c;
+  color: #fff;
+}
+
+.node-panel-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.node-panel-item strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #e4e4e7;
+}
+
+.node-panel-item small {
+  display: block;
+  font-size: 11px;
+  color: #a1a1aa;
+}

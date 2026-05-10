@@ -1,0 +1,25 @@
+.workflow-row {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.444rem;
+  min-height: 1.889rem;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 0.444rem;
+  color: #cbd5e1;
+  background: transparent;
+  text-align: left;
+}
+
+.workflow-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-row.active,
+.workflow-row:hover {
+  background: #343434;
+  color: #fff;
+}

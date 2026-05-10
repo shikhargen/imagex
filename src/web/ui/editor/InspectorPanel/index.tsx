@@ -1,9 +1,10 @@
 import { Menu, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { ImageXNode, OutputNodeResult } from '../../../shared/types.js';
-import { nodeMeta } from '../flow/meta.js';
-import { EditableField } from '../flow/nodes/parts/EditableField.js';
-import type { UpdateNodeData } from '../flow/types.js';
+import type { ImageXNode, OutputNodeResult } from '../../../../shared/types.js';
+import { nodeMeta } from '../../flow/meta.js';
+import { EditableField } from '../../flow/nodes/parts/EditableField.js';
+import type { UpdateNodeData } from '../../flow/types.js';
+import './styles.css';
 
 export function InspectorPanel({
   node,

@@ -1,6 +1,7 @@
 import { Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useEffect, useRef, useState } from 'react';
+import './styles.css';
 
 export function PanelShell({
   title,
