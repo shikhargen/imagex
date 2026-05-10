@@ -10,6 +10,42 @@ import type { UiNode } from '../types.js';
 
 type Props = NodeProps<UiNode>;
 
+/* ------------------------------------------------------------------ */
+/*  Measure actual label width (px → rem)                             */
+/* ------------------------------------------------------------------ */
+const measureEl = (() => {
+  if (typeof document === 'undefined') return null;
+  const el = document.createElement('span');
+  el.style.cssText =
+    'position:absolute;visibility:hidden;white-space:nowrap;' +
+    'pointer-events:none;top:-9999px;left:-9999px;' +
+    'font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;' +
+    'font-size:0.75rem;font-weight:500;line-height:1;letter-spacing:0.01em;';
+  document.body.appendChild(el);
+  return el;
+})();
+
+const labelWidthCache = new Map<string, number>();
+
+function measureLabelWidthRem(label: string): number {
+  const cached = labelWidthCache.get(label);
+  if (cached !== undefined) return cached;
+
+  if (!measureEl) {
+    // SSR fallback – rough estimate
+    const approx = label.length * 0.5;
+    labelWidthCache.set(label, approx);
+    return approx;
+  }
+
+  measureEl.textContent = label;
+  const px = measureEl.offsetWidth;
+  const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const rem = px / rootPx;
+  labelWidthCache.set(label, rem);
+  return rem;
+}
+
 function TextNodeImpl(props: Props) {
   return <BaseNode {...props} />;
 }
@@ -60,8 +96,14 @@ function BaseNode({ data, selected, preview, frame }: Props & { preview?: boolea
   const fieldInputs = inputPortsFor(node).filter((port) => port.field);
   const outputs = outputPortsFor(node);
   const connectedInputHandles = data.connectedTargetHandles;
-  const longestLabel = Math.max(0, ...fields.map((field) => field.label.length));
-  const fieldLabelWidth = Math.min(Math.max(7.5, longestLabel * 0.72 + 2.75), 16);
+  const inlineLabels = fields
+    .filter((field) => field.kind !== 'textarea')
+    .map((field) => field.label);
+  const longestLabelWidthRem =
+    inlineLabels.length > 0
+      ? Math.max(...inlineLabels.map(measureLabelWidthRem))
+      : 0;
+  const fieldLabelWidth = Math.max(4.5, longestLabelWidthRem + 1.25);
   const controlWidth = 13.5;
   const previewUrl = typeof node.data.previewUrl === 'string' ? node.data.previewUrl : undefined;
   const onMenu = (event: MouseEvent) => {
@@ -84,15 +126,17 @@ function BaseNode({ data, selected, preview, frame }: Props & { preview?: boolea
       onContextMenu={onMenu}
     >
       <header className="ix-node-header">
-        <span className="ix-node-icon">
-          <Icon size={16} strokeWidth={2.2} />
-        </span>
-        <span>
-          <strong>{meta.label}</strong>
-          <small>{meta.description}</small>
-        </span>
-        <button className="icon-button nodrag" type="button" aria-label="Node actions" onClick={onMenu}>
-          <MoreHorizontal size={16} />
+        <div className="ix-node-header-main">
+          <span className="ix-node-icon">
+            <Icon size={15} strokeWidth={2} />
+          </span>
+          <div className="ix-node-header-text">
+            <strong>{meta.label}</strong>
+            <small>{meta.description}</small>
+          </div>
+        </div>
+        <button className="ix-node-menu-btn nodrag" type="button" aria-label="Node actions" onClick={onMenu}>
+          <MoreHorizontal size={14} />
         </button>
       </header>
 
@@ -133,11 +177,16 @@ function BaseNode({ data, selected, preview, frame }: Props & { preview?: boolea
         <div className="ix-output-preview">
           {previewUrl ? <img src={previewUrl} alt="Output preview" /> : <div className="empty-preview">Preview</div>}
           <button
-            className="preview-prompt-button nodrag"
+            className="preview-prompt-button nodrag nopan nowheel"
             type="button"
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              event.preventDefault();
+              data.onShowPrompt?.();
+            }}
             onClick={(event) => {
               event.stopPropagation();
-              data.onShowPrompt?.();
+              event.preventDefault();
             }}
           >
             <Eye size={14} />
@@ -151,10 +200,11 @@ function BaseNode({ data, selected, preview, frame }: Props & { preview?: boolea
           const handleId = fieldHandleId(field.id);
           const connected = connectedInputHandles.includes(handleId);
           const port = fieldInputs.find((candidate) => candidate.id === handleId);
+          const showHandle = port && (connected || !!port.accepts || field.kind === 'inputSocket');
           return (
             <div
               key={field.id}
-              className={`ix-field-socket-row ${connected ? 'connected' : ''}`}
+              className={`ix-field-socket-row ${connected ? 'connected' : ''} ${showHandle ? 'has-handle' : ''}`}
               data-custom-field-id={node.type === 'custom' ? field.id : undefined}
               data-custom-node-id={node.type === 'custom' ? node.id : undefined}
               onMouseEnter={() => {
@@ -167,7 +217,7 @@ function BaseNode({ data, selected, preview, frame }: Props & { preview?: boolea
                 if (node.type === 'custom') data.onActivateCustomField?.(node.id, field.id);
               }}
             >
-              {port && (
+              {showHandle && (
                 <Handle
                   id={port.id}
                   className={`ix-handle ix-handle-in ix-port-${port.kind}`}
@@ -191,12 +241,16 @@ function BaseNode({ data, selected, preview, frame }: Props & { preview?: boolea
                       ? node.data.assetUrl
                       : undefined
                   }
+                  assetDisplayName={
+                    node.type === 'imageInput' && field.id === 'path' && typeof node.data.assetName === 'string'
+                      ? node.data.assetName
+                      : undefined
+                  }
                   onOpenAssets={
                     node.type === 'imageInput' && field.id === 'path'
                       ? () => data.onOpenAssetPicker?.(node.id, field.id)
                       : undefined
                   }
-                  compact={node.type !== 'text'}
                 />
               )}
             </div>

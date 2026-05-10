@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import type { ImageXEdge, ImageXNode, ImageXWorkflow, NodeType } from '../../../shared/types.js';
 import { editableFieldDefinitionsFor } from './fields/definitions.js';
 import { nodeMeta } from './meta.js';
-import { inputPortsFor, outputPortsFor, portLabel } from './ports.js';
+import { inputPortsFor, outputPortsFor } from './ports.js';
 import type { OpenNodeMenu, UiEdge, UiNode, UiNodeData, UpdateNodeData } from './types.js';
 
 const NODE_WIDTH_EXTRA_REM = 3.25;
@@ -134,19 +134,6 @@ export function toFlowEdge(edge: ImageXEdge, nodes: ImageXNode[]): Edge {
     type: 'default',
     animated: false,
     reconnectable: true,
-    label: edgeLabel(edge, nodes),
-    labelShowBg: true,
-    labelBgBorderRadius: 4,
-    labelBgPadding: [4, 2],
-    labelStyle: {
-      fill: '#aab1bd',
-      fontSize: 14,
-      fontWeight: 700,
-    },
-    labelBgStyle: {
-      fill: '#202124',
-      stroke: '#3a3a3a',
-    },
     markerEnd: {
       type: MarkerType.ArrowClosed,
       width: 14,
@@ -177,15 +164,6 @@ function withInferredHandles(edge: ImageXEdge, nodes: ImageXNode[]): ImageXEdge 
   if (sourceHandle) inferred.sourceHandle = sourceHandle;
   if (targetHandle) inferred.targetHandle = targetHandle;
   return inferred;
-}
-
-function edgeLabel(edge: ImageXEdge, nodes: ImageXNode[]): string {
-  const source = nodes.find((node) => node.id === edge.source);
-  const target = nodes.find((node) => node.id === edge.target);
-  const sourceLabel = portLabel(source, edge.sourceHandle);
-  const targetLabel = portLabel(target, edge.targetHandle);
-  if (sourceLabel && sourceLabel === targetLabel) return sourceLabel;
-  return targetLabel || sourceLabel || '';
 }
 
 export function createUiWorkflowNode(type: NodeType, position: { x: number; y: number }): ImageXNode {

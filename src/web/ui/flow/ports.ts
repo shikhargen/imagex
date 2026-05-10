@@ -1,5 +1,5 @@
 import type { CustomFieldDefinition, ImageXNode, NodeType } from '../../../shared/types.js';
-import { editableFieldDefinitionsFor, fieldDefinitionsFor, labelForFieldId } from './fields/definitions.js';
+import { builtInFieldDefinitions, editableFieldDefinitionsFor, fieldDefinitionsFor, labelForFieldId } from './fields/definitions.js';
 
 export type PortKind = 'prompt' | 'character' | 'style' | 'scene' | 'image' | 'result';
 
@@ -27,13 +27,15 @@ export function fieldHandleId(field: string): string {
 }
 
 function fieldPorts(type: NodeType): NodePort[] {
-  return editableFields[type].map((field) => ({
-    id: fieldHandleId(field),
-    label: labelForFieldId(field),
-    kind: 'prompt',
-    accepts: ['prompt'],
-    field,
-  }));
+  return builtInFieldDefinitions[type]
+    .filter((field) => editableFields[type].includes(field.id))
+    .map((field) => ({
+      id: fieldHandleId(field.id),
+      label: field.label,
+      kind: 'prompt',
+      ...(field.accepts ? { accepts: field.accepts as PortKind[] } : {}),
+      field: field.id,
+    }));
 }
 
 export const inputPorts: Record<NodeType, NodePort[]> = {
@@ -96,7 +98,7 @@ function fieldToInputPort(field: CustomFieldDefinition): NodePort {
     id: fieldHandleId(field.id),
     label: field.label,
     kind: 'prompt',
-    accepts: ['prompt'],
+    ...(field.accepts ? { accepts: field.accepts as PortKind[] } : {}),
     field: field.id,
   };
 }

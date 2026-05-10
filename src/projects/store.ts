@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { imagexPaths } from '../config/paths.js';
 import type {
@@ -9,12 +9,16 @@ import type {
   ImageXProjectSummary,
   ImageXTemplateSummary,
   ImageXWorkflow,
+  ImageXNode,
+  ImageXEdge,
+  ImageXNodeAsset,
 } from '../shared/types.js';
 import { createDefaultWorkflow, createEmptyWorkflow } from '../workflows/defaults.js';
 
 const metadataFile = 'imagex.project.json';
 const workflowFile = 'workflow.imagex.json';
 const assetsManifestFile = 'assets.json';
+const nodeAssetsManifestFile = 'node-assets.json';
 
 export type CreateProjectInput = {
   title: string;
@@ -25,7 +29,6 @@ export type CreateProjectInput = {
 export async function listProjects(): Promise<ImageXProjectSummary[]> {
   const root = imagexPaths().projectsDir;
   await mkdir(root, { recursive: true });
-  await migrateLegacyWorkflows();
   const entries = await readdir(root, { withFileTypes: true });
   const projects = await Promise.all(
     entries
@@ -35,38 +38,6 @@ export async function listProjects(): Promise<ImageXProjectSummary[]> {
   return projects
     .filter((project): project is ImageXProjectSummary => Boolean(project))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-}
-
-async function migrateLegacyWorkflows(): Promise<void> {
-  const legacyDir = imagexPaths().workflowsDir;
-  const files = await readdir(legacyDir).catch(() => []);
-  await Promise.all(
-    files
-      .filter((file) => file.endsWith('.imagex.json'))
-      .map(async (file) => {
-        const workflow = JSON.parse(await readFile(join(legacyDir, file), 'utf8')) as ImageXWorkflow;
-        const id = `${slugify(workflow.name || 'legacy-workflow')}-${workflow.id.slice(0, 8)}`;
-        const dir = projectDir(id);
-        const metadataPath = join(dir, metadataFile);
-        if (await exists(metadataPath)) return;
-        const now = workflow.updatedAt || new Date().toISOString();
-        const metadata: ImageXProjectMetadata = {
-          app: 'imagex',
-          schemaVersion: 1,
-          id,
-          title: workflow.name || 'Legacy Workflow',
-          createdAt: workflow.createdAt || now,
-          updatedAt: now,
-          workflowFile,
-          assetsDir: 'assets',
-          outputsDir: 'outputs',
-        };
-        await mkdir(join(dir, metadata.assetsDir), { recursive: true });
-        await mkdir(join(dir, metadata.outputsDir), { recursive: true });
-        await writeFile(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
-        await writeFile(join(dir, metadata.workflowFile), `${JSON.stringify(workflow, null, 2)}\n`, 'utf8');
-      })
-  );
 }
 
 export async function getProject(id: string): Promise<ImageXProject> {
@@ -187,6 +158,36 @@ export async function listProjectAssets(projectId: string): Promise<ImageXAsset[
   return readAssetsManifest(project.metadata);
 }
 
+export async function listProjectNodeAssets(projectId: string): Promise<ImageXNodeAsset[]> {
+  const project = await getProject(projectId);
+  return readNodeAssetsManifest(project.metadata);
+}
+
+export async function createProjectNodeAsset(
+  projectId: string,
+  input: { name: string; rootNodeId: string; nodes: ImageXNode[]; edges: ImageXEdge[] }
+): Promise<ImageXNodeAsset[]> {
+  const project = await getProject(projectId);
+  const assets = await readNodeAssetsManifest(project.metadata);
+  const root = input.nodes.find((node) => node.id === input.rootNodeId) || input.nodes[0];
+  if (!root) throw new Error('Node asset requires at least one node.');
+  const now = new Date().toISOString();
+  const asset: ImageXNodeAsset = {
+    id: `node-asset-${randomUUID().slice(0, 10)}`,
+    name: input.name.trim() || root.type,
+    type: 'node',
+    nodeType: root.type,
+    rootNodeId: root.id,
+    nodes: input.nodes,
+    edges: input.edges,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const nextAssets = [...assets, asset];
+  await writeNodeAssetsManifest(project.metadata, nextAssets);
+  return nextAssets;
+}
+
 export async function importProjectAsset(
   projectId: string,
   input: { name: string; mimeType: string; dataBase64: string }
@@ -203,7 +204,7 @@ export async function importProjectAsset(
     name: input.name.trim() || file,
     type: 'image',
     file,
-    url: `/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(file)}`,
+    url: assetUrl(projectId, id),
     createdAt: now,
     updatedAt: now,
   };
@@ -236,6 +237,13 @@ export async function deleteProjectAsset(projectId: string, assetId: string): Pr
 
 export function projectAssetDir(projectId: string): string {
   return join(projectDir(projectId), 'assets');
+}
+
+export async function projectAssetPath(projectId: string, assetId: string): Promise<string> {
+  const project = await getProject(projectId);
+  const asset = (await readAssetsManifest(project.metadata)).find((candidate) => candidate.id === assetId);
+  if (!asset) throw new Error('Asset not found.');
+  return join(projectDir(projectId), project.metadata.assetsDir, asset.file);
 }
 
 function normalizeWorkflow(workflow: Partial<ImageXWorkflow> | undefined, metadata: ImageXProjectMetadata): ImageXWorkflow {
@@ -288,14 +296,30 @@ async function readAssetsManifest(metadata: ImageXProjectMetadata): Promise<Imag
   return Array.isArray(assets)
     ? assets.map((asset) => ({
         ...asset,
-        url: `/api/projects/${encodeURIComponent(metadata.id)}/assets/${encodeURIComponent(asset.file)}`,
+        url: assetUrl(metadata.id, asset.id),
       }))
     : [];
+}
+
+async function readNodeAssetsManifest(metadata: ImageXProjectMetadata): Promise<ImageXNodeAsset[]> {
+  const manifestPath = join(projectDir(metadata.id), metadata.assetsDir, nodeAssetsManifestFile);
+  const raw = await readFile(manifestPath, 'utf8').catch(() => '[]');
+  const assets = JSON.parse(raw) as ImageXNodeAsset[];
+  return Array.isArray(assets) ? assets : [];
+}
+
+function assetUrl(projectId: string, assetId: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/asset-files/${encodeURIComponent(assetId)}`;
 }
 
 async function writeAssetsManifest(metadata: ImageXProjectMetadata, assets: ImageXAsset[]): Promise<void> {
   await mkdir(join(projectDir(metadata.id), metadata.assetsDir), { recursive: true });
   await writeFile(join(projectDir(metadata.id), metadata.assetsDir, assetsManifestFile), `${JSON.stringify(assets, null, 2)}\n`, 'utf8');
+}
+
+async function writeNodeAssetsManifest(metadata: ImageXProjectMetadata, assets: ImageXNodeAsset[]): Promise<void> {
+  await mkdir(join(projectDir(metadata.id), metadata.assetsDir), { recursive: true });
+  await writeFile(join(projectDir(metadata.id), metadata.assetsDir, nodeAssetsManifestFile), `${JSON.stringify(assets, null, 2)}\n`, 'utf8');
 }
 
 function extensionForMime(mimeType: string): string | null {
@@ -365,11 +389,4 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 48) || 'project';
-}
-
-async function exists(path: string): Promise<boolean> {
-  return access(path).then(
-    () => true,
-    () => false
-  );
 }

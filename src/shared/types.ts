@@ -27,6 +27,7 @@ export type CustomFieldDefinition = {
   min?: number;
   max?: number;
   step?: number;
+  accepts?: string[];
 };
 
 export type ImageXWorkflow = {
@@ -84,6 +85,18 @@ export type ImageXAsset = {
   updatedAt: string;
 };
 
+export type ImageXNodeAsset = {
+  id: string;
+  name: string;
+  type: 'node';
+  nodeType: NodeType;
+  rootNodeId: string;
+  nodes: ImageXNode[];
+  edges: ImageXEdge[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ImageXNode = {
   id: string;
   type: NodeType;
@@ -104,6 +117,13 @@ export type WorkflowSettings = {
   useCase?: string;
 };
 
+export type ImageReference = {
+  name: string;
+  role: string;
+  notes: string;
+  position: string;
+};
+
 export type ImageGenerationOptions = {
   prompt: string;
   model: string;
@@ -121,6 +141,7 @@ export type ImageGenerationOptions = {
   quality?: 'low' | 'medium' | 'high' | 'auto';
   count: number;
   workflowName?: string;
+  references?: ImageReference[];
 };
 
 export type GeneratedImage = {

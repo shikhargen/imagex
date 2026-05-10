@@ -8,10 +8,10 @@ export const builtInFieldDefinitions: Record<NodeType, CustomFieldDefinition[]> 
   text: [{ id: 'text', label: 'Text', kind: 'textarea', value: '' }],
   character: [
     { id: 'name', label: 'Name', kind: 'text', value: '' },
-    { id: 'description', label: 'Description', kind: 'textarea', value: '' },
-    { id: 'traits', label: 'Traits', kind: 'text', value: '' },
-    { id: 'clothing', label: 'Clothing', kind: 'text', value: '' },
-    { id: 'mood', label: 'Mood', kind: 'text', value: '' },
+    { id: 'description', label: 'Description', kind: 'textarea', value: '', accepts: ['prompt', 'image'] },
+    { id: 'traits', label: 'Traits', kind: 'text', value: '', accepts: ['prompt', 'image'] },
+    { id: 'clothing', label: 'Clothing', kind: 'text', value: '', accepts: ['prompt', 'image'] },
+    { id: 'mood', label: 'Mood', kind: 'text', value: '', accepts: ['prompt', 'image'] },
   ],
   style: [
     { id: 'name', label: 'Name', kind: 'text', value: '' },
@@ -22,16 +22,16 @@ export const builtInFieldDefinitions: Record<NodeType, CustomFieldDefinition[]> 
       value: 'digital illustration',
       options: ['digital illustration', 'photorealistic', '3D render', 'manga', 'pixel art', 'watercolor'],
     },
-    { id: 'palette', label: 'Palette', kind: 'text', value: '' },
-    { id: 'description', label: 'Description', kind: 'textarea', value: '' },
-    { id: 'visualConstraints', label: 'Visual Constraints', kind: 'text', value: '' },
+    { id: 'palette', label: 'Palette', kind: 'text', value: '', accepts: ['prompt', 'image'] },
+    { id: 'description', label: 'Description', kind: 'textarea', value: '', accepts: ['prompt', 'image'] },
+    { id: 'visualConstraints', label: 'Visual Constraints', kind: 'text', value: '', accepts: ['prompt', 'image'] },
   ],
   scene: [
-    { id: 'environment', label: 'Environment', kind: 'textarea', value: '' },
-    { id: 'lighting', label: 'Lighting', kind: 'textarea', value: '' },
-    { id: 'camera', label: 'Camera', kind: 'text', value: '' },
-    { id: 'mood', label: 'Mood', kind: 'text', value: '' },
-    { id: 'weather', label: 'Weather', kind: 'text', value: '' },
+    { id: 'environment', label: 'Environment', kind: 'textarea', value: '', accepts: ['prompt', 'image'] },
+    { id: 'lighting', label: 'Lighting', kind: 'textarea', value: '', accepts: ['prompt', 'image'] },
+    { id: 'camera', label: 'Camera', kind: 'text', value: '', accepts: ['prompt', 'image'] },
+    { id: 'mood', label: 'Mood', kind: 'text', value: '', accepts: ['prompt', 'image'] },
+    { id: 'weather', label: 'Weather', kind: 'text', value: '', accepts: ['prompt', 'image'] },
   ],
   imageInput: [
     { id: 'path', label: 'Path', kind: 'text', value: '' },
@@ -42,7 +42,7 @@ export const builtInFieldDefinitions: Record<NodeType, CustomFieldDefinition[]> 
       value: 'reference',
       options: ['reference', 'edit target', 'style reference', 'composition reference'],
     },
-    { id: 'notes', label: 'Notes', kind: 'textarea', value: '' },
+    { id: 'notes', label: 'Notes', kind: 'textarea', value: '', accepts: ['prompt', 'image'] },
   ],
   output: [
     {

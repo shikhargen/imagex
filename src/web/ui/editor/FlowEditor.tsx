@@ -15,7 +15,7 @@ import {
   SelectionMode,
   type ReactFlowInstance,
 } from '@xyflow/react';
-import { memo, useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { NodeType } from '../../../shared/types.js';
 import { nodeMeta } from '../flow/meta.js';
 import { isCompatibleConnection, portLabel } from '../flow/ports.js';
@@ -58,6 +58,10 @@ export function FlowEditor({
   onNodeDragStopCheckFrames,
   onPaneClickClear,
   onCommitFlow,
+  onFlowReady,
+  placingNodeId,
+  onPlacingMove,
+  onPlacingDrop,
 }: {
   nodes: UiNode[];
   edges: UiEdge[];
@@ -74,6 +78,10 @@ export function FlowEditor({
   onNodeDragStopCheckFrames: (nodeId: string) => void;
   onPaneClickClear: () => void;
   onCommitFlow: () => void;
+  onFlowReady?: (api: { screenToFlowPosition: (p: { x: number; y: number }) => { x: number; y: number } }) => void;
+  placingNodeId?: string | null;
+  onPlacingMove?: (nodeId: string, position: { x: number; y: number }) => void;
+  onPlacingDrop?: () => void;
 }) {
   const edgeReconnectSuccessful = useRef(true);
   const frameDragRef = useRef<{ id: string; position: { x: number; y: number } } | null>(null);
@@ -134,6 +142,26 @@ export function FlowEditor({
   const memoizedFitViewOptions = useMemo(() => ({ padding: 0.2 }), []);
   const memoizedPanOnDrag = useMemo(() => [1, 2] as [number, number], []);
 
+  useEffect(() => {
+    const canvas = document.querySelector('.react-flow__pane') as HTMLElement | null;
+    if (!canvas) return;
+    if (placingNodeId) {
+      canvas.style.cursor = 'crosshair';
+    } else {
+      canvas.style.cursor = '';
+    }
+  }, [placingNodeId]);
+
+  useEffect(() => {
+    if (!placingNodeId || !reactFlowRef.current || !onPlacingMove) return;
+    const handleMouseMove = (event: MouseEvent) => {
+      const position = reactFlowRef.current!.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      onPlacingMove(placingNodeId, position);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    return () => document.removeEventListener('mousemove', handleMouseMove);
+  }, [placingNodeId, onPlacingMove]);
+
   return (
     <section className="canvas">
       <ReactFlow
@@ -144,12 +172,14 @@ export function FlowEditor({
         onEdgesChange={handleEdgesChange}
         onInit={(instance) => {
           reactFlowRef.current = instance;
+          onFlowReady?.({ screenToFlowPosition: instance.screenToFlowPosition.bind(instance) });
         }}
         onConnect={handleConnect}
         onReconnect={handleReconnect}
         onReconnectStart={handleReconnectStart}
         onReconnectEnd={handleReconnectEnd}
         onNodeDragStart={(_, node) => {
+          if (placingNodeId) return;
           onBeforeChange();
           if (node.type === 'frame') frameDragRef.current = { id: node.id, position: node.position };
         }}
@@ -175,7 +205,13 @@ export function FlowEditor({
         edgesReconnectable
         reconnectRadius={16}
         isValidConnection={(connection) => isCompatibleConnection(connection, nodes.map((node) => node.data.workflowNode))}
-        onNodeClick={(_, node) => onSelectNode(node.id)}
+        onNodeClick={(_, node) => {
+          if (placingNodeId) {
+            onPlacingDrop?.();
+            return;
+          }
+          onSelectNode(node.id);
+        }}
         onNodeContextMenu={(event, node) => {
           event.preventDefault();
           onNodeMenu(node.id, { x: event.clientX, y: event.clientY });
@@ -186,6 +222,10 @@ export function FlowEditor({
         }}
         onPaneContextMenu={(event) => {
           event.preventDefault();
+          if (placingNodeId) {
+            onPlacingDrop?.();
+            return;
+          }
           onPaneMenu(
             { x: event.clientX, y: event.clientY },
             reactFlowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY }) || { x: 0, y: 0 }
@@ -201,7 +241,13 @@ export function FlowEditor({
           onBeforeChange();
           onEdgesChange(edges.filter((candidate) => candidate.id !== edge.id));
         }}
-        onPaneClick={onPaneClickClear}
+        onPaneClick={() => {
+          if (placingNodeId) {
+            onPlacingDrop?.();
+            return;
+          }
+          onPaneClickClear();
+        }}
         fitView
         fitViewOptions={memoizedFitViewOptions}
         minZoom={0.25}

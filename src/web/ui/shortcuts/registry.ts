@@ -13,6 +13,13 @@ export type ShortcutBinding = {
 
 export const editorShortcuts = [
   {
+    id: 'toggle-add-node',
+    scope: 'editor',
+    key: 'a',
+    label: 'A',
+    description: 'Toggle add node picker',
+  },
+  {
     id: 'delete-selection',
     scope: 'editor',
     key: 'x',

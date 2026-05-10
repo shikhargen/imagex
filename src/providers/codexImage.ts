@@ -56,6 +56,23 @@ async function requestCodexImages(
   options: ImageGenerationOptions,
   bearerToken: string
 ): Promise<CodexImage[]> {
+  const content: Array<Record<string, unknown>> = [];
+
+  for (const ref of options.references || []) {
+    if ('dataUrl' in ref && typeof ref.dataUrl === 'string') {
+      content.push({
+        type: 'input_image',
+        image_url: ref.dataUrl,
+        detail: 'auto',
+      });
+    }
+  }
+
+  content.push({
+    type: 'input_text',
+    text: options.prompt,
+  });
+
   const response = await fetch(codexResponsesUrl, {
     method: 'POST',
     headers: {
@@ -68,7 +85,7 @@ async function requestCodexImages(
       input: [
         {
           role: 'user',
-          content: [{ type: 'input_text', text: options.prompt }],
+          content,
         },
       ],
       instructions: 'You are an image generation assistant.',

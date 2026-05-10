@@ -1,4 +1,5 @@
-import { SlidersHorizontal, X } from 'lucide-react';
+import { Menu, SlidersHorizontal, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import type { GenerateWorkflowResponse, ImageXNode } from '../../../shared/types.js';
 import { nodeMeta } from '../flow/meta.js';
 import { EditableField } from '../flow/nodes/parts/EditableField.js';
@@ -8,10 +9,12 @@ export function InspectorPanel({
   node,
   onChange,
   result,
+  onClose,
 }: {
   node: ImageXNode | null;
   onChange: UpdateNodeData;
   result: GenerateWorkflowResponse | null;
+  onClose: () => void;
 }) {
   return (
     <aside className="inspector">
@@ -23,7 +26,7 @@ export function InspectorPanel({
           <h2>Inspector</h2>
           <p>{node ? nodeMeta[node.type].label : 'No node selected'}</p>
         </div>
-        <button className="icon-button" type="button" aria-label="Close inspector">
+        <button className="icon-button" type="button" aria-label="Close inspector" onClick={onClose}>
           <X size={17} />
         </button>
       </header>
@@ -53,6 +56,17 @@ export function InspectorPanel({
           <p className="muted inline">Run the workflow to see the compiled prompt and latest output here.</p>
         )}
       </section>
+    </aside>
+  );
+}
+
+export function InspectorToggle({ onOpen }: { onOpen: () => void }) {
+  return (
+    <aside className="inspector-rail">
+      <Button variant="ghost" size="icon" type="button" aria-label="Open inspector" title="Open inspector" onClick={onOpen}>
+        <Menu size={18} />
+      </Button>
+      <span>Inspector</span>
     </aside>
   );
 }

@@ -7,20 +7,17 @@ export function EditableField({
   field,
   value,
   onChange,
-  compact,
 }: {
   nodeId: string;
   field: string;
   value: unknown;
   onChange: UpdateNodeData;
-  compact?: boolean;
 }) {
   return (
     <FieldControl
       field={{ id: field, label: labelForFieldId(field), kind: field === 'text' || field === 'description' ? 'textarea' : 'text' }}
       value={value}
       onChange={(nextValue) => onChange(nodeId, field, nextValue)}
-      {...(compact === undefined ? {} : { compact })}
     />
   );
 }

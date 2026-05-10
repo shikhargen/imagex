@@ -6,29 +6,53 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+
+// Shared registry to ensure only one select is open at a time
+const openSelects = new Set<() => void>();
+
+function useExclusiveSelect() {
+  const [open, setOpen] = useState(false);
+  const closeRef = useRef(() => setOpen(false));
+
+  const handleOpenChange = useCallback((next: boolean) => {
+    if (next) {
+      // Close all other open selects
+      for (const close of openSelects) {
+        if (close !== closeRef.current) close();
+      }
+      openSelects.add(closeRef.current);
+    } else {
+      openSelects.delete(closeRef.current);
+    }
+    setOpen(next);
+  }, []);
+
+  return { open, onOpenChange: handleOpenChange };
+}
 
 export function FieldControl({
   field,
   value,
   onChange,
-  compact,
   assetPreviewUrl,
+  assetDisplayName,
   onOpenAssets,
 }: {
   field: CustomFieldDefinition;
   value: unknown;
   onChange: (value: unknown) => void;
-  compact?: boolean;
   assetPreviewUrl?: string | undefined;
+  assetDisplayName?: string | undefined;
   onOpenAssets?: (() => void) | undefined;
 }) {
   const stringValue = value === undefined || value === null ? '' : String(value);
+  const assetLabel = assetDisplayName?.trim() || stringValue;
   const [draft, setDraft] = useState(stringValue);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectionRef = useRef<{ start: number; end: number } | null>(null);
-  const isLong = field.kind === 'textarea' || !compact || stringValue.length > 42;
+  const isLong = field.kind === 'textarea' || stringValue.length > 42;
 
   useEffect(() => {
     setDraft(stringValue);
@@ -52,20 +76,12 @@ export function FieldControl({
 
   if (field.kind === 'select') {
     return (
-      <NodeFieldShell label={field.label}>
-        <Select value={stringValue} onValueChange={onChange}>
-          <SelectTrigger className="nodrag ix-select-trigger" size="sm">
-            <SelectValue placeholder="Select..." />
-          </SelectTrigger>
-          <SelectContent className="nodrag">
-            {(field.options || []).map((option) => (
-              <SelectItem key={option} value={option}>
-                {option}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </NodeFieldShell>
+      <SelectField
+        value={stringValue}
+        options={field.options || []}
+        label={field.label}
+        onChange={onChange}
+      />
     );
   }
 
@@ -91,7 +107,7 @@ export function FieldControl({
   if (field.kind === 'number') {
     return (
       <NodeFieldShell label={field.label}>
-          <Input className="nodrag" type="number" value={stringValue} onChange={(event) => onChange(coerceNumber(event.target.value))} />
+        <Input className="nodrag" type="number" value={stringValue} onChange={(event) => onChange(coerceNumber(event.target.value))} />
       </NodeFieldShell>
     );
   }
@@ -104,6 +120,23 @@ export function FieldControl({
     );
   }
 
+  if (onOpenAssets) {
+    return (
+      <NodeFieldShell label={field.label} long className="asset-shell">
+        <div className="ix-asset-field">
+          <Button type="button" variant="secondary" size="sm" className="nodrag ix-asset-picker-button" onClick={onOpenAssets}>
+            <span>{assetLabel || draft || 'Choose asset...'}</span>
+          </Button>
+          {assetPreviewUrl && (
+            <figure className="ix-asset-preview">
+              <img src={assetPreviewUrl} alt="" />
+            </figure>
+          )}
+        </div>
+      </NodeFieldShell>
+    );
+  }
+
   if (isLong) {
     return (
       <NodeFieldShell label={field.label} long>
@@ -112,22 +145,9 @@ export function FieldControl({
     );
   }
 
-  if (onOpenAssets) {
-    return (
-      <NodeFieldShell label={field.label} long={Boolean(assetPreviewUrl)}>
-        <div className="ix-asset-field">
-          <Button type="button" variant="secondary" size="sm" className="nodrag justify-start" onClick={onOpenAssets}>
-            {draft || 'Choose asset...'}
-          </Button>
-          {assetPreviewUrl && <img src={assetPreviewUrl} alt="" />}
-        </div>
-      </NodeFieldShell>
-    );
-  }
-
   return (
     <NodeFieldShell label={field.label}>
-        <Input ref={inputRef} className="nodrag" value={draft} onChange={(event) => updateDraft(event.target.value)} />
+      <Input ref={inputRef} className="nodrag" value={draft} onChange={(event) => updateDraft(event.target.value)} />
     </NodeFieldShell>
   );
 }
@@ -146,10 +166,40 @@ function NodeFieldShell({
   return (
     <Field className={`ix-field ${long ? 'long' : ''}`}>
       <span className={`ix-control-shell ${long ? 'text-shell' : ''} ${className || ''}`}>
-        <FieldLabel className="ix-control-label">{label}</FieldLabel>
+        <FieldLabel className={`ix-control-label ${long ? 'ix-control-label--floating' : 'ix-control-label--inline'}`}>{label}</FieldLabel>
         {children}
       </span>
     </Field>
+  );
+}
+
+function SelectField({
+  value,
+  options,
+  label,
+  onChange,
+}: {
+  value: string;
+  options: string[];
+  label: string;
+  onChange: (value: string) => void;
+}) {
+  const exclusive = useExclusiveSelect();
+  return (
+    <NodeFieldShell label={label}>
+      <Select value={value} onValueChange={onChange} open={exclusive.open} onOpenChange={exclusive.onOpenChange}>
+        <SelectTrigger className="nodrag ix-select-trigger" size="sm">
+          <SelectValue placeholder="Select..." />
+        </SelectTrigger>
+        <SelectContent className="nodrag">
+          {options.map((option) => (
+            <SelectItem key={option} value={option}>
+              {option}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </NodeFieldShell>
   );
 }
 

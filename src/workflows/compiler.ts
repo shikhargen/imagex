@@ -1,4 +1,4 @@
-import type { CustomFieldDefinition, ImageGenerationOptions, ImageXNode, ImageXWorkflow } from '../shared/types.js';
+import type { CustomFieldDefinition, ImageGenerationOptions, ImageReference, ImageXNode, ImageXWorkflow } from '../shared/types.js';
 
 type CompiledWorkflow = {
   prompt: string;
@@ -7,7 +7,9 @@ type CompiledWorkflow = {
 
 export function compileWorkflow(workflow: ImageXWorkflow): CompiledWorkflow {
   const output = workflow.nodes.find((node) => node.type === 'output');
-  const prompt = buildPrompt(workflow);
+  const context = graphContext(workflow);
+  const { promptJson, references } = buildPromptAndReferences(workflow, context);
+  const prompt = JSON.stringify(promptJson, null, 2);
 
   return {
     prompt,
@@ -25,36 +27,64 @@ export function compileWorkflow(workflow: ImageXWorkflow): CompiledWorkflow {
       quality: enumField(output, 'quality', ['low', 'medium', 'high', 'auto'], 'auto'),
       count: numberField(output, 'count', 1, 1, 4),
       workflowName: workflow.name,
+      references,
     },
   };
 }
 
-function buildPrompt(workflow: ImageXWorkflow): string {
-  const context = graphContext(workflow);
+function buildPromptAndReferences(workflow: ImageXWorkflow, context: GraphContext): { promptJson: unknown; references: ImageReference[] } {
   const outputs = workflow.nodes.filter((node) => node.type === 'output');
   const compiledOutputs = outputs.map((output) => compileOutputNode(output, context, new Set())).filter(isMeaningfulObject);
   const fallback = outputs.length === 0 ? fallbackInputs(workflow, context) : null;
 
-  return JSON.stringify(
-    {
-      useCase: workflow.settings.useCase || 'stylized-concept',
-      assetType: 'imagex generated workflow output',
-      instruction:
-        'Generate one image from this structured workflow. Treat node fields as reusable creative components. Preserve explicit user values and do not invent unrelated logos, watermarks, or extra text.',
-      outputs: compiledOutputs,
-      ...(fallback
-        ? {
-            primaryRequest: fallback.primaryRequest,
-            characters: fallback.characters,
-            styles: fallback.styles,
-            scenes: fallback.scenes,
-            imageInputs: fallback.imageInputs,
-          }
-        : {}),
-    },
-    null,
-    2
-  );
+  const rawPrompt = {
+    useCase: workflow.settings.useCase || 'stylized-concept',
+    assetType: 'imagex generated workflow output',
+    instruction:
+      'Generate one image from this structured workflow. Treat node fields as reusable creative components. Preserve explicit user values and do not invent unrelated logos, watermarks, or extra text.',
+    outputs: compiledOutputs,
+    ...(fallback
+      ? {
+          primaryRequest: fallback.primaryRequest,
+          characters: fallback.characters,
+          styles: fallback.styles,
+          scenes: fallback.scenes,
+          imageInputs: fallback.imageInputs,
+        }
+      : {}),
+  };
+
+  const references: ImageReference[] = [];
+  const nextIndex = { value: 1 };
+  const promptJson = assignImagePositions(rawPrompt, nextIndex, references);
+
+  return { promptJson, references };
+}
+
+function assignImagePositions(value: unknown, nextIndex: { value: number }, refs: ImageReference[]): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => assignImagePositions(item, nextIndex, refs));
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if ('__imagex_image' in record) {
+      const position = `[image-${nextIndex.value++}]`;
+      const { __imagex_image: _marker, path, role, notes, ...rest } = record;
+      refs.push({
+        name: String(path || ''),
+        role: String(role || 'reference'),
+        notes: String(notes || ''),
+        position,
+      });
+      return { type: 'image', position, role: String(role || 'reference'), notes: String(notes || ''), ...rest };
+    }
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(record)) {
+      result[key] = assignImagePositions(val, nextIndex, refs);
+    }
+    return result;
+  }
+  return value;
 }
 
 type GraphContext = {
@@ -82,6 +112,7 @@ function graphContext(workflow: ImageXWorkflow): GraphContext {
     existing.push(source);
     incomingByTargetHandle.set(key, existing);
   }
+
   return { nodesById, incomingByTargetHandle };
 }
 
@@ -163,8 +194,10 @@ function compileConnectedNode(node: ImageXNode, context: GraphContext, seen: Set
       return compileNodeFields(node, ['name', 'medium', 'palette', 'description', 'visualConstraints', 'strength'], context, nextSeen);
     case 'scene':
       return compileNodeFields(node, ['name', 'environment', 'mood', 'lighting', 'camera', 'weather', 'props', 'constraints'], context, nextSeen);
-    case 'imageInput':
-      return compileNodeFields(node, ['path', 'role', 'notes'], context, nextSeen);
+    case 'imageInput': {
+      const fields = compileNodeFields(node, ['path', 'role', 'notes'], context, nextSeen);
+      return { __imagex_image: true, ...fields };
+    }
     case 'output':
       return compileOutputNode(node, context, seen);
     case 'frame':
