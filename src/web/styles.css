@@ -15,23 +15,23 @@
   text-rendering: optimizeLegibility;
 
   /* Custom UI System Variables */
-  --ui-bg-base: #131313;
-  --ui-bg-panel: #18181b;
-  --ui-bg-surface: #202020;
-  --ui-bg-overlay: #252525;
-  --ui-bg-hover: rgba(255, 255, 255, 0.06);
-  --ui-bg-active: rgba(255, 255, 255, 0.1);
+  --ui-bg-base: #0f0f0f;
+  --ui-bg-panel: #171717;
+  --ui-bg-surface: #1e1e1e;
+  --ui-bg-overlay: #282828;
+  --ui-bg-hover: rgba(255, 255, 255, 0.07);
+  --ui-bg-active: rgba(255, 255, 255, 0.12);
   --ui-bg-accent: rgba(99, 102, 241, 0.2);
   
-  --ui-border-subtle: rgba(148, 163, 184, 0.08);
-  --ui-border-default: rgba(148, 163, 184, 0.16);
-  --ui-border-strong: rgba(148, 163, 184, 0.24);
+  --ui-border-subtle: rgba(148, 163, 184, 0.1);
+  --ui-border-default: rgba(148, 163, 184, 0.18);
+  --ui-border-strong: rgba(148, 163, 184, 0.28);
   --ui-border-accent: rgba(250, 204, 21, 0.6);
   
   --ui-text-primary: #f8fafc;
   --ui-text-secondary: #d4d4d8;
-  --ui-text-muted: #a1a1aa;
-  --ui-text-dim: #71717a;
+  --ui-text-muted: #a8a8b0;
+  --ui-text-dim: #7e7e8a;
   --ui-text-inverse: #f4f4f5;
   --ui-text-subtle: #cbd5e1;
   --ui-text-faint: #a8b3c4;
@@ -105,6 +105,8 @@
 body {
   margin: 0;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,
@@ -119,6 +121,27 @@ span {
 
 button {
   cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* Global scrollbar styling */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .app-shell {
@@ -131,24 +154,24 @@ button {
 
 .app-body {
   display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr) 0.278rem var(--right-panel, 18.889rem);
+  grid-template-columns: 3.4rem minmax(0, 1fr) 0.278rem var(--right-panel, 18.889rem);
   min-height: 0;
   overflow: hidden;
 }
 
 .app-body.side-panel-open {
-  grid-template-columns: 4rem var(--side-panel, 16.111rem) 0.278rem minmax(0, 1fr) 0.278rem var(
+  grid-template-columns: 3.4rem var(--side-panel, 16.111rem) 0.278rem minmax(0, 1fr) 0.278rem var(
       --right-panel,
       18.889rem
     );
 }
 
 .app-body.right-collapsed {
-  grid-template-columns: 4rem minmax(0, 1fr) var(--right-panel, 2.889rem);
+  grid-template-columns: 3.4rem minmax(0, 1fr) var(--right-panel, 2.889rem);
 }
 
 .app-body.side-panel-open.right-collapsed {
-  grid-template-columns: 4rem var(--side-panel, 16.111rem) 0.278rem minmax(0, 1fr) var(
+  grid-template-columns: 3.4rem var(--side-panel, 16.111rem) 0.278rem minmax(0, 1fr) var(
       --right-panel,
       2.889rem
     );
@@ -170,14 +193,16 @@ button {
 .resize-handle {
   position: relative;
   z-index: 3;
-  background: var(--ui-bg-panel);
+  background: transparent;
   cursor: col-resize;
   border-left: 1px solid var(--ui-border-default);
-  border-right: 1px solid var(--ui-border-default);
+  border-right: none;
+  transition: background 0.2s;
 }
 
 .resize-handle:hover {
-  background: var(--ui-bg-hover);
+  background: rgba(255, 255, 255, 0.06);
+  border-left-color: var(--ui-border-strong);
 }
 
 .brand {
@@ -331,8 +356,8 @@ kbd {
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.35 0 0);
+  --primary-foreground: oklch(0.96 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);

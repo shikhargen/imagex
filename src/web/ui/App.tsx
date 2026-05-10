@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { Box, Component, FileText, Frame, Image, Layers3, MapPin, Palette, UserRound, X } from 'lucide-react';
 import type {
   CustomFieldDefinition,
@@ -1726,16 +1726,18 @@ function FloatingContextMenu({
         }}
       />
       <div className="node-menu" style={{ left: menu.x, top: menu.y }}>
-        {actions.map(([action, label]) => (
-          <Button
-            key={action}
-            variant="ghost"
-            size="sm"
-            className={action === 'delete' ? 'danger justify-start' : 'justify-start'}
-            onClick={() => onAction(action, menu)}
-          >
-            {label}
-          </Button>
+        {actions.map(([action, label], index) => (
+          <Fragment key={action}>
+            {action === 'delete' && index > 0 && <div className="node-menu-separator" />}
+            <Button
+              variant="ghost"
+              size="sm"
+              className={action === 'delete' ? 'danger justify-start' : 'justify-start'}
+              onClick={() => onAction(action, menu)}
+            >
+              {label}
+            </Button>
+          </Fragment>
         ))}
       </div>
     </>

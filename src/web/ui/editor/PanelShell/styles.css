@@ -3,8 +3,18 @@
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  padding: var(--ui-space-5) 0;
-  gap: var(--ui-space-4);
+  padding: var(--ui-space-4) 0;
+  gap: var(--ui-space-3);
+  animation: panel-content-fade 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes panel-content-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .side-panel-header {
@@ -12,16 +22,16 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--ui-space-3);
-  padding: 0 var(--ui-space-6) var(--ui-space-3);
-  border-bottom: 1px solid var(--ui-border-default);
+  padding: var(--ui-space-1) var(--ui-space-5) var(--ui-space-3);
   flex-shrink: 0;
 }
 
 .side-panel-header h2 {
   margin: 0;
-  font-size: var(--ui-text-base);
+  font-size: var(--ui-text-sm);
   font-weight: 600;
   color: var(--ui-text-primary);
+  letter-spacing: 0.01em;
 }
 
 .side-panel-search {
@@ -29,11 +39,17 @@
   align-items: center;
   gap: var(--ui-space-2);
   padding: var(--ui-space-2) var(--ui-space-3);
-  margin: 0 var(--ui-space-6);
-  border: 1px solid var(--ui-border-strong);
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-overlay);
+  margin: 0 var(--ui-space-5);
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-bg-panel);
   flex-shrink: 0;
+  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.side-panel-search:focus-within {
+  border-color: var(--ui-border-strong);
+  background: var(--ui-bg-overlay);
 }
 
 .side-panel-search input {
@@ -52,10 +68,9 @@
 
 .side-panel-tabs {
   display: flex;
-  gap: var(--ui-space-1);
-  border-bottom: 1px solid var(--ui-border-default);
-  padding: 0 var(--ui-space-6) var(--ui-space-2);
-  min-height: 1.889rem;
+  gap: 2px;
+  padding: 0 var(--ui-space-5) var(--ui-space-2);
+  min-height: 1.667rem;
   flex-shrink: 0;
 }
 
@@ -63,19 +78,20 @@
   display: flex;
   align-items: center;
   gap: var(--ui-space-2);
-  padding: var(--ui-space-2) var(--ui-space-4);
+  padding: var(--ui-space-1) var(--ui-space-3);
   border: none;
-  border-radius: var(--ui-radius-md);
+  border-radius: var(--ui-radius-sm);
   background: transparent;
-  color: var(--ui-text-muted);
-  font-size: var(--ui-text-sm);
+  color: var(--ui-text-dim);
+  font-size: var(--ui-text-xs);
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .side-panel-tabs button:hover {
   background: var(--ui-bg-hover);
-  color: var(--ui-text-primary);
+  color: var(--ui-text-secondary);
 }
 
 .side-panel-tabs button.active {
@@ -86,17 +102,36 @@
 .side-panel-body {
   display: grid;
   align-content: start;
-  gap: 0.111rem;
+  gap: 1px;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+.side-panel-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.side-panel-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.side-panel-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+
+.side-panel-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .side-panel-footer {
   display: grid;
   gap: var(--ui-space-1);
-  border-top: 1px solid var(--ui-border-default);
-  padding: var(--ui-space-3) var(--ui-space-6) 0;
+  border-top: 1px solid var(--ui-border-subtle);
+  padding: var(--ui-space-3) var(--ui-space-5) 0;
   flex-shrink: 0;
 }
 
@@ -105,23 +140,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--ui-space-3);
-  width: calc(100% - 0.889rem);
-  min-height: 2.222rem;
-  border: 1px dashed var(--ui-border-strong);
-  border-radius: var(--ui-radius-lg);
+  gap: var(--ui-space-2);
+  width: 100%;
+  min-height: 2rem;
+  border: 1px dashed var(--ui-border-subtle);
+  border-radius: var(--ui-radius-md);
   padding: var(--ui-space-2);
-  margin: 0 var(--ui-space-3);
   background: transparent;
-  color: var(--ui-text-muted);
+  color: var(--ui-text-dim);
   font-size: var(--ui-text-xs);
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .workflow-create-btn:hover,
 .asset-import-btn:hover {
   background: var(--ui-bg-hover);
-  color: var(--ui-text-primary);
-  border-color: var(--ui-border-strong);
+  color: var(--ui-text-secondary);
+  border-color: var(--ui-border-default);
 }

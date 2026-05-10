@@ -204,7 +204,6 @@ export function Sidebar({
               title={item.label}
             >
               <Icon size={20} />
-              <span>{item.label}</span>
             </button>
           );
         })}
@@ -221,7 +220,6 @@ export function Sidebar({
               title={item.label}
             >
               <Icon size={20} />
-              <span>{item.label}</span>
             </button>
           );
         })}

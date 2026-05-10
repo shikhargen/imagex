@@ -5,6 +5,37 @@
   border-left: 1px solid var(--ui-border-default);
   background: var(--ui-bg-surface);
   overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  animation: inspector-slide-in 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes inspector-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.inspector::-webkit-scrollbar {
+  width: 4px;
+}
+
+.inspector::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.inspector::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+
+.inspector::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .inspector-rail {
@@ -22,59 +53,70 @@
 .inspector-rail span {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  color: var(--ui-text-muted);
+  color: var(--ui-text-dim);
   font-size: var(--ui-text-xs);
-  letter-spacing: 0;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: 500;
 }
 
 .panel-header {
   display: grid;
-  grid-template-columns: 1.889rem minmax(0, 1fr) 1.667rem;
-  gap: var(--ui-space-4);
+  grid-template-columns: 1.667rem minmax(0, 1fr) 1.5rem;
+  gap: var(--ui-space-3);
   align-items: center;
-  min-height: 4rem;
-  border-bottom: 1px solid var(--ui-border-default);
-  padding: var(--ui-space-6) var(--ui-space-7);
+  min-height: 3.333rem;
+  border-bottom: 1px solid var(--ui-border-subtle);
+  padding: var(--ui-space-5) var(--ui-space-6);
 }
 
 .panel-header h2 {
   margin: 0;
   color: var(--ui-text-primary);
-  font-size: var(--ui-text-base);
+  font-size: var(--ui-text-sm);
+  font-weight: 600;
 }
 
 .panel-header p {
-  margin: 0.167rem 0 0;
-  color: var(--ui-text-muted);
+  margin: 2px 0 0;
+  color: var(--ui-text-dim);
   font-size: var(--ui-text-xs);
 }
 
 .inspector-fields {
   display: grid;
-  gap: var(--ui-space-6);
-  padding: var(--ui-space-7);
+  gap: var(--ui-space-5);
+  padding: var(--ui-space-6);
 }
 
 .inspector-title {
   display: grid;
-  gap: var(--ui-space-2);
+  gap: var(--ui-space-1);
   border: 1px solid
-    color-mix(in srgb, var(--node-accent) 34%, var(--ui-border-default));
-  border-radius: var(--ui-radius-xl);
-  padding: var(--ui-space-5);
-  background: var(--ui-bg-overlay);
+    color-mix(in srgb, var(--node-accent) 20%, var(--ui-border-subtle));
+  border-radius: var(--ui-radius-lg);
+  padding: var(--ui-space-4);
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 0.2s;
+}
+
+.inspector-title:hover {
+  border-color: color-mix(in srgb, var(--node-accent) 40%, var(--ui-border-default));
 }
 
 .inspector-title span {
   color: var(--node-accent);
-  font-size: var(--ui-text-xs);
+  font-size: 0.583rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  opacity: 0.85;
 }
 
 .inspector-title strong {
   color: var(--ui-text-primary);
   font-size: var(--ui-text-sm);
+  font-weight: 500;
 }
 
 .inspector .ix-field {
@@ -84,30 +126,47 @@
 .inspector-output {
   display: grid;
   gap: var(--ui-space-4);
-  margin: 0 var(--ui-space-7) var(--ui-space-7);
-  border-top: 1px solid var(--ui-border-default);
-  padding-top: var(--ui-space-7);
+  margin: 0 var(--ui-space-6) var(--ui-space-6);
+  border-top: 1px solid var(--ui-border-subtle);
+  padding-top: var(--ui-space-6);
 }
 
 .inspector-output h2 {
   margin: 0;
-  color: var(--ui-text-primary);
-  font-size: var(--ui-text-sm);
+  color: var(--ui-text-secondary);
+  font-size: var(--ui-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .inspector-output img {
   width: 100%;
-  border: 1px solid var(--ui-border-strong);
-  border-radius: var(--ui-radius-xl);
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-lg);
+  transition: border-color 0.2s;
+}
+
+.inspector-output img:hover {
+  border-color: var(--ui-border-default);
 }
 
 .inspector-output textarea {
   width: 100%;
   height: 8.333rem;
-  border: 1px solid var(--ui-border-default);
-  border-radius: var(--ui-radius-xl);
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-lg);
   padding: var(--ui-space-4);
   color: var(--ui-text-secondary);
-  background: var(--ui-bg-overlay);
+  background: var(--ui-bg-panel);
   resize: none;
+  font-size: var(--ui-text-sm);
+  line-height: 1.5;
+  transition: border-color 0.2s;
+}
+
+.inspector-output textarea:focus {
+  outline: none;
+  border-color: var(--ui-border-strong);
+  background: var(--ui-bg-overlay);
 }

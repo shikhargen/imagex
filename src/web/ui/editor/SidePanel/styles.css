@@ -6,6 +6,18 @@
   overflow: hidden;
   border-right: 1px solid var(--ui-border-default);
   background: var(--ui-bg-surface);
+  animation: panel-slide-in 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes panel-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .side-panel-inner {
@@ -20,7 +32,21 @@
   top: var(--ui-space-3);
   right: var(--ui-space-3);
   z-index: 2;
-  width: 1.556rem;
-  height: 1.556rem;
-  border-radius: var(--ui-radius-md);
+  width: 1.444rem;
+  height: 1.444rem;
+  border-radius: var(--ui-radius-sm);
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  opacity: 0.6;
+}
+
+.side-panel-close:hover {
+  opacity: 1;
+  color: var(--ui-text-primary);
+  background: var(--ui-bg-hover);
 }

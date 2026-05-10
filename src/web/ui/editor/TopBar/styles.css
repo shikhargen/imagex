@@ -2,20 +2,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ui-space-5);
+  gap: var(--ui-space-4);
   border-bottom: 1px solid var(--ui-border-default);
   background: var(--ui-bg-surface);
-  padding: var(--ui-space-3) var(--ui-space-6);
-  min-height: 2.667rem;
+  padding: var(--ui-space-2) var(--ui-space-6);
+  min-height: 2.444rem;
+  backdrop-filter: blur(8px);
 }
 
 .top-bar-tabs {
   display: flex;
   align-items: center;
-  gap: var(--ui-space-2);
+  gap: 2px;
   overflow: auto;
   min-width: 0;
   margin-right: auto;
+  padding: var(--ui-space-1) 0;
 }
 
 .top-bar-tab {
@@ -26,34 +28,56 @@
   border: none;
   border-radius: var(--ui-radius-md);
   background: transparent;
-  color: var(--ui-text-muted);
+  color: var(--ui-text-dim);
   font-size: var(--ui-text-sm);
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   min-width: 6rem;
+  position: relative;
+  text-overflow: ellipsis;
 }
 
 .top-bar-tab:hover {
   background: var(--ui-bg-hover);
-  color: var(--ui-text-primary);
+  color: var(--ui-text-secondary);
 }
 
 .top-bar-tab.active {
   background: var(--ui-bg-active);
   color: var(--ui-text-primary);
+  font-weight: 600;
+}
+
+.top-bar-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 25%;
+  right: 25%;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ui-text-primary);
+  opacity: 0.5;
 }
 
 .top-bar-tab-add {
   padding: var(--ui-space-2);
-  color: var(--ui-text-muted);
-  min-width: 1rem;
+  color: var(--ui-text-dim);
+  min-width: 1.5rem;
+  opacity: 0.6;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.top-bar-tab-add:hover {
+  opacity: 1;
 }
 
 .top-bar-actions {
   display: flex;
   align-items: center;
-  gap: var(--ui-space-3);
+  gap: var(--ui-space-4);
   flex-shrink: 0;
 }
 
@@ -61,6 +85,7 @@
   color: var(--ui-text-dim);
   font-size: var(--ui-text-xs);
   white-space: nowrap;
+  opacity: 0.7;
 }
 
 @media (max-width: 860px) {

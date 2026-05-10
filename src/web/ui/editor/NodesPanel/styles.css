@@ -1,50 +1,60 @@
 .node-panel-list {
   display: grid;
   align-content: start;
-  gap: var(--ui-space-1);
+  gap: 1px;
   padding: 0 var(--ui-space-3);
 }
 
 .node-panel-item {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
+  grid-template-columns: 1.75rem minmax(0, 1fr);
   align-items: center;
-  gap: var(--ui-space-4);
-  min-height: 2.444rem;
+  gap: var(--ui-space-3);
+  min-height: 2.222rem;
   border: none;
-  border-radius: var(--ui-radius-lg);
+  border-radius: var(--ui-radius-sm);
   padding: var(--ui-space-2) var(--ui-space-3);
   background: transparent;
-  color: var(--ui-text-secondary);
+  color: var(--ui-text-muted);
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: var(--ui-text-sm);
 }
 
 .node-panel-item:hover {
   background: var(--ui-bg-hover);
-  color: var(--ui-text-primary);
+  color: var(--ui-text-secondary);
 }
 
 .node-panel-icon {
   display: grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--ui-radius-lg);
-  background: rgba(255, 255, 255, 0.05);
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--ui-radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  transition: background 0.15s;
+}
+
+.node-panel-item:hover .node-panel-icon {
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .node-panel-item strong {
   display: block;
   font-size: var(--ui-text-sm);
   font-weight: 500;
+  color: var(--ui-text-secondary);
+}
+
+.node-panel-item:hover strong {
   color: var(--ui-text-primary);
 }
 
 .node-panel-item small {
   display: block;
   font-size: var(--ui-text-xs);
-  color: var(--ui-text-muted);
+  color: var(--ui-text-dim);
+  margin-top: 1px;
 }

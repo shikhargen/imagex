@@ -4,7 +4,7 @@
   gap: var(--ui-space-5);
   border-bottom: 1px solid var(--ui-border-default);
   background: var(--ui-bg-surface);
-  padding: var(--ui-space-4) 1rem;
+  padding: var(--ui-space-3) var(--ui-space-6);
 }
 
 .toolbar-spacer {
@@ -13,6 +13,7 @@
 
 .workflow-name {
   width: 14.444rem;
-  font-size: var(--ui-text-base);
-  font-weight: 700;
+  font-size: var(--ui-text-sm);
+  font-weight: 600;
+  color: var(--ui-text-primary);
 }

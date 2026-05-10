@@ -8,14 +8,15 @@
   );
   min-width: 20rem;
   max-width: 42rem;
-  border: 1px solid var(--ui-border-strong);
+  border: 1px solid var(--ui-border-subtle);
   border-top: 2px solid var(--node-accent);
-  border-radius: 14px;
-  background: var(--ui-bg-overlay);
+  border-radius: 12px;
+  background: var(--ui-bg-surface);
   color: var(--ui-text-primary);
-  box-shadow: var(--ui-shadow-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 0 0 0 transparent;
   overflow: visible;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .ix-node-text {
@@ -50,9 +51,9 @@
 }
 
 .ix-node.selected {
-  border-color: var(--node-accent);
-  box-shadow: 0 0 0 0.056rem var(--node-accent),
-    0 0.222rem 0.889rem rgba(0, 0, 0, 0.4);
+  border-color: color-mix(in srgb, var(--node-accent) 60%, transparent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3),
+    0 0 0 1px color-mix(in srgb, var(--node-accent) 40%, transparent);
 }
 
 /* Frame nodes */
@@ -60,24 +61,23 @@
   width: 100%;
   height: 100%;
   min-height: 100%;
-  background: rgba(20, 20, 20, 0.45);
-  border: 1px dashed var(--ui-border-strong);
+  background: rgba(20, 20, 20, 0.4);
+  border: 1px dashed var(--ui-border-default);
   border-top: 2px solid var(--node-accent);
-  border-radius: 14px;
-  box-shadow: inset 0 0 0 0.056rem rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.02);
   max-width: none;
   padding-top: 2.25rem;
 }
 
 .ix-node-frame .ix-node-header {
-  background: rgba(40, 40, 40, 0.6);
-  border-bottom-color: var(--ui-bg-hover);
+  background: rgba(30, 30, 30, 0.5);
+  border-bottom-color: rgba(255, 255, 255, 0.04);
 }
 
 .ix-node-frame.drop-target {
-  border-color: var(--ui-text-dim);
-  box-shadow: inset 0 0 0 0.056rem var(--ui-bg-active),
-    0 0 0 2px rgba(160, 160, 160, 0.2);
+  border-color: var(--ui-text-muted);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 /* Header */
@@ -87,12 +87,12 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0.625rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 14px 14px 0 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 12px 12px 0 0;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.04) 0%,
-    rgba(255, 255, 255, 0.01) 100%
+    rgba(255, 255, 255, 0.03) 0%,
+    transparent 100%
   );
 }
 
@@ -109,9 +109,9 @@
   place-items: center;
   width: 1.5rem;
   height: 1.5rem;
-  border-radius: 12px;
+  border-radius: var(--ui-radius-md);
   color: var(--node-accent);
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.25);
   flex-shrink: 0;
 }
 
@@ -289,15 +289,15 @@
   width: 100%;
   min-width: 0;
   min-height: 1.75rem;
-  border: 1px solid var(--ui-border-default);
-  border-radius: var(--ui-radius-xl);
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-lg);
   overflow: hidden;
   background: var(--ui-bg-panel);
-  transition: border-color 0.12s ease;
+  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .ix-control-shell:focus-within {
-  border-color: var(--node-accent);
+  border-color: color-mix(in srgb, var(--node-accent) 50%, transparent);
 }
 
 .ix-control-shell > * {
@@ -323,8 +323,8 @@
   width: auto;
   max-width: var(--field-label-width);
   padding: 0.375rem 0.625rem;
-  color: var(--ui-text-muted);
-  background: var(--ui-bg-surface);
+  color: var(--ui-text-dim);
+  background: rgba(255, 255, 255, 0.03);
   font-size: 0.75rem;
   font-weight: 500;
   line-height: 1;
@@ -342,8 +342,7 @@
   height: 0.889rem;
   border-radius: 10px;
   padding: 0.65rem 0.5rem;
-  background: rgba(60, 60, 60, 0.95);
-  color: var(--ui-text-secondary);
+  color: var(--ui-text-muted);
   font-size: 0.6875rem;
   font-weight: 500;
   line-height: 1;
