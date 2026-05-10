@@ -8,7 +8,7 @@ export type UiNodeData = {
   workflowNode: ImageXNode;
   onChange: UpdateNodeData;
   onMenu: OpenNodeMenu;
-  onShowPrompt?: () => void;
+  onShowPrompt?: (nodeId: string) => void;
   onAddCustomField?: (nodeId: string, preset: string) => void;
   onUpdateCustomField?: (nodeId: string, fieldId: string, value: unknown) => void;
   onActivateCustomField?: (nodeId: string, fieldId: string) => void;

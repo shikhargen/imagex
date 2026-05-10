@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { imagexPaths } from '../config/paths.js';
 import { getCodexAuthStatus, resolveCodexBearerToken } from '../auth/store.js';
 import { generateCodexImages } from '../providers/codexImage.js';
-import type { GenerateWorkflowRequest, ImageXEdge, ImageXNode } from '../shared/types.js';
-import { compileWorkflow } from '../workflows/compiler.js';
+import type { GenerateWorkflowRequest, GeneratedImage, ImageXEdge, ImageXNode, ImageXWorkflow, OutputNodeResult } from '../shared/types.js';
+import { compileOutputNodeWorkflow, compileWorkflow } from '../workflows/compiler.js';
 import { listWorkflows, saveWorkflow } from '../workflows/store.js';
 import {
   createProject,
@@ -211,16 +211,14 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
 
   app.post('/api/projects/:projectId/generate', async (req: Request<{ projectId: string }, unknown, GenerateWorkflowRequest>, res, next) => {
     try {
-      const { prompt, options: generationOptions } = compileWorkflow(req.body.workflow);
-      const resolvedReferences = await resolveImageReferences(req.params.projectId, generationOptions.references);
-      generationOptions.references = resolvedReferences;
       const bearerToken = await resolveCodexBearerToken();
-      const images = await generateCodexImages(generationOptions, bearerToken, {
-        outputDir: projectOutputDir(req.params.projectId),
-        urlBase: `/api/projects/${encodeURIComponent(req.params.projectId)}/outputs`,
-      });
+      const results = await executeWorkflowOutputNodes(
+        req.body.workflow,
+        bearerToken,
+        req.params.projectId
+      );
       await saveProjectWorkflow(req.params.projectId, req.body.workflow);
-      res.json({ prompt, images });
+      res.json({ results });
     } catch (error) {
       next(error);
     }
@@ -256,11 +254,18 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     return resolved;
   }
 
-  app.post('/api/projects/:projectId/compile', async (req: Request<{ projectId: string }, unknown, GenerateWorkflowRequest>, res, next) => {
+  app.post('/api/projects/:projectId/compile', async (req: Request<{ projectId: string }, unknown, GenerateWorkflowRequest & { outputNodeId?: string }>, res, next) => {
     try {
       await getProject(req.params.projectId);
-      const { prompt, options } = compileWorkflow(req.body.workflow);
-      res.json({ prompt, options });
+      const { workflow, outputNodeId } = req.body;
+      const compiled = outputNodeId
+        ? compileOutputNodeWorkflow(workflow, outputNodeId)
+        : compileWorkflow(workflow);
+      if (!compiled) {
+        res.status(400).json({ error: 'Output node not found or invalid' });
+        return;
+      }
+      res.json({ prompt: compiled.prompt, options: compiled.options });
     } catch (error) {
       next(error);
     }
@@ -276,20 +281,26 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
 
   app.post('/api/generate', async (req: Request<unknown, unknown, GenerateWorkflowRequest>, res, next) => {
     try {
-      const { prompt, options: generationOptions } = compileWorkflow(req.body.workflow);
       const bearerToken = await resolveCodexBearerToken();
-      const images = await generateCodexImages(generationOptions, bearerToken);
+      const results = await executeWorkflowOutputNodes(req.body.workflow, bearerToken);
       await saveWorkflow(req.body.workflow);
-      res.json({ prompt, images });
+      res.json({ results });
     } catch (error) {
       next(error);
     }
   });
 
-  app.post('/api/compile', async (req: Request<unknown, unknown, GenerateWorkflowRequest>, res, next) => {
+  app.post('/api/compile', async (req: Request<unknown, unknown, GenerateWorkflowRequest & { outputNodeId?: string }>, res, next) => {
     try {
-      const { prompt, options } = compileWorkflow(req.body.workflow);
-      res.json({ prompt, options });
+      const { workflow, outputNodeId } = req.body;
+      const compiled = outputNodeId
+        ? compileOutputNodeWorkflow(workflow, outputNodeId)
+        : compileWorkflow(workflow);
+      if (!compiled) {
+        res.status(400).json({ error: 'Output node not found or invalid' });
+        return;
+      }
+      res.json({ prompt: compiled.prompt, options: compiled.options });
     } catch (error) {
       next(error);
     }
@@ -348,6 +359,102 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
 
   serveWebApp(app);
   app.use(errorHandler);
+
+  async function executeWorkflowOutputNodes(
+    workflow: ImageXWorkflow,
+    bearerToken: string,
+    projectId?: string
+  ): Promise<OutputNodeResult[]> {
+    const outputNodes = workflow.nodes.filter((n) => n.type === 'output');
+    if (outputNodes.length === 0) return [];
+
+    // Build dependency graph: targetId -> Set of source output node ids
+    const dependencies = new Map<string, Set<string>>();
+    for (const edge of workflow.edges) {
+      const source = workflow.nodes.find((n) => n.id === edge.source);
+      const target = workflow.nodes.find((n) => n.id === edge.target);
+      if (!source || !target) continue;
+      if (source.type !== 'output' || target.type !== 'output') continue;
+      if (edge.sourceHandle === 'result-out' && edge.targetHandle === 'image-in') {
+        if (!dependencies.has(target.id)) dependencies.set(target.id, new Set());
+        dependencies.get(target.id)!.add(source.id);
+      }
+    }
+
+    // Kahn's algorithm for topological sort
+    const inDegree = new Map<string, number>();
+    for (const node of outputNodes) {
+      inDegree.set(node.id, dependencies.get(node.id)?.size || 0);
+    }
+
+    const queue = outputNodes.filter((n) => inDegree.get(n.id) === 0).map((n) => n.id);
+    const order: string[] = [];
+
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      order.push(id);
+
+      for (const [targetId, deps] of dependencies) {
+        if (deps.has(id)) {
+          const newDegree = (inDegree.get(targetId) || 0) - 1;
+          inDegree.set(targetId, newDegree);
+          if (newDegree === 0) queue.push(targetId);
+        }
+      }
+    }
+
+    if (order.length !== outputNodes.length) {
+      throw new Error('Circular dependency detected between output nodes');
+    }
+
+    const results = new Map<string, GeneratedImage[]>();
+    const outputResults: OutputNodeResult[] = [];
+
+    for (const outputNodeId of order) {
+      const compiled = compileOutputNodeWorkflow(workflow, outputNodeId);
+      if (!compiled) continue;
+
+      const { prompt, options } = compiled;
+
+      // Resolve static image references
+      if (projectId) {
+        const resolved = await resolveImageReferences(projectId, options.references);
+        options.references = resolved;
+      }
+
+      // Gather upstream generated images from dependent output nodes
+      const upstreamIds = dependencies.get(outputNodeId) || new Set();
+      const extraImages: Array<{ dataUrl: string }> = [];
+      for (const upstreamId of upstreamIds) {
+        const upstreamImages = results.get(upstreamId) || [];
+        for (const img of upstreamImages) {
+          const file = await readFile(img.path);
+          const ext = extname(img.path).slice(1) || 'png';
+          const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+          extraImages.push({
+            dataUrl: `data:${mimeType};base64,${file.toString('base64')}`,
+          });
+        }
+      }
+
+      const images = await generateCodexImages(
+        options,
+        bearerToken,
+        projectId
+          ? {
+              outputDir: projectOutputDir(projectId),
+              urlBase: `/api/projects/${encodeURIComponent(projectId)}/outputs`,
+            }
+          : undefined,
+        extraImages
+      );
+
+      results.set(outputNodeId, images);
+      outputResults.push({ outputNodeId, prompt, images });
+    }
+
+    return outputResults;
+  }
 
   const server = createServer(app);
   await new Promise<void>((resolveListen, rejectListen) => {

@@ -1,6 +1,6 @@
 import { Menu, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { GenerateWorkflowResponse, ImageXNode } from '../../../shared/types.js';
+import type { ImageXNode, OutputNodeResult } from '../../../shared/types.js';
 import { nodeMeta } from '../flow/meta.js';
 import { EditableField } from '../flow/nodes/parts/EditableField.js';
 import type { UpdateNodeData } from '../flow/types.js';
@@ -8,12 +8,12 @@ import type { UpdateNodeData } from '../flow/types.js';
 export function InspectorPanel({
   node,
   onChange,
-  result,
+  outputResults,
   onClose,
 }: {
   node: ImageXNode | null;
   onChange: UpdateNodeData;
-  result: GenerateWorkflowResponse | null;
+  outputResults: Map<string, OutputNodeResult>;
   onClose: () => void;
 }) {
   return (
@@ -47,14 +47,19 @@ export function InspectorPanel({
       )}
       <section className="inspector-output">
         <h2>Latest Output</h2>
-        {result?.images[0] ? (
-          <>
-            <img src={result.images[0].url} alt="Latest generated output" />
-            <textarea readOnly value={result.prompt} />
-          </>
-        ) : (
-          <p className="muted inline">Run the workflow to see the compiled prompt and latest output here.</p>
-        )}
+        {(() => {
+          const result = node && node.type === 'output' ? outputResults.get(node.id) : undefined;
+          const image = result?.images[0];
+          if (image) {
+            return (
+              <>
+                <img src={image.url} alt="Latest generated output" />
+                <textarea readOnly value={result.prompt} />
+              </>
+            );
+          }
+          return <p className="muted inline">Run the workflow to see the compiled prompt and latest output here.</p>;
+        })()}
       </section>
     </aside>
   );

@@ -28,7 +28,7 @@ export function workflowToFlow(
   workflow: ImageXWorkflow,
   onChange: UpdateNodeData,
   onMenu: OpenNodeMenu,
-  onShowPrompt?: () => void,
+  onShowPrompt?: (nodeId: string) => void,
   onAddCustomField?: UiNodeData['onAddCustomField'],
   onUpdateCustomField?: UiNodeData['onUpdateCustomField'],
   onActivateCustomField?: UiNodeData['onActivateCustomField'],

@@ -155,7 +155,12 @@ export type GenerateWorkflowRequest = {
   workflow: ImageXWorkflow;
 };
 
-export type GenerateWorkflowResponse = {
+export type OutputNodeResult = {
+  outputNodeId: string;
   prompt: string;
   images: GeneratedImage[];
+};
+
+export type GenerateWorkflowResponse = {
+  results: OutputNodeResult[];
 };

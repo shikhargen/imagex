@@ -15,11 +15,12 @@ const codexResponsesModel = 'gpt-5.5';
 export async function generateCodexImages(
   options: ImageGenerationOptions,
   bearerToken: string,
-  storage?: { outputDir: string; urlBase: string }
+  storage?: { outputDir: string; urlBase: string },
+  extraImages?: Array<{ dataUrl: string }>
 ): Promise<GeneratedImage[]> {
   const images: CodexImage[] = [];
   for (let index = 0; index < options.count; index += 1) {
-    images.push(...(await requestCodexImages(options, bearerToken)));
+    images.push(...(await requestCodexImages(options, bearerToken, extraImages)));
   }
 
   if (images.length === 0) {
@@ -54,7 +55,8 @@ export async function generateCodexImages(
 
 async function requestCodexImages(
   options: ImageGenerationOptions,
-  bearerToken: string
+  bearerToken: string,
+  extraImages?: Array<{ dataUrl: string }>
 ): Promise<CodexImage[]> {
   const content: Array<Record<string, unknown>> = [];
 
@@ -66,6 +68,14 @@ async function requestCodexImages(
         detail: 'auto',
       });
     }
+  }
+
+  for (const img of extraImages || []) {
+    content.push({
+      type: 'input_image',
+      image_url: img.dataUrl,
+      detail: 'auto',
+    });
   }
 
   content.push({

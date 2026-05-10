@@ -49,7 +49,7 @@ export const inputPorts: Record<NodeType, NodePort[]> = {
     { id: 'character-in', label: 'Character', kind: 'character', accepts: ['character'] },
     { id: 'style-in', label: 'Style', kind: 'style', accepts: ['style'] },
     { id: 'scene-in', label: 'Scene', kind: 'scene', accepts: ['scene'] },
-    { id: 'image-in', label: 'Reference', kind: 'image', accepts: ['image'] },
+    { id: 'image-in', label: 'Reference', kind: 'image', accepts: ['image', 'result'] },
     ...fieldPorts('output'),
   ],
   frame: [],

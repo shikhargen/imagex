@@ -1,13 +1,15 @@
 import { Activity, Clock, Images } from 'lucide-react';
-import type { GenerateWorkflowResponse } from '../../../shared/types.js';
+import type { OutputNodeResult } from '../../../shared/types.js';
 
 export function StatusPanel({
   status,
-  result,
+  outputResults,
 }: {
   status: string;
-  result: GenerateWorkflowResponse | null;
+  outputResults: Map<string, OutputNodeResult>;
 }) {
+  const allImages = Array.from(outputResults.values()).flatMap((r) => r.images);
+  const hasResults = outputResults.size > 0;
   return (
     <footer className="bottom-panel">
       <section className="queue-card">
@@ -17,7 +19,7 @@ export function StatusPanel({
         </header>
         <p>{status}</p>
         <div className="progress-track">
-          <span style={{ width: status === 'Generating...' ? '62%' : result ? '100%' : '0%' }} />
+          <span style={{ width: status === 'Generating...' ? '62%' : hasResults ? '100%' : '0%' }} />
         </div>
       </section>
       <section className="recent-card">
@@ -25,9 +27,9 @@ export function StatusPanel({
           <Images size={17} />
           <h2>Recent Outputs</h2>
         </header>
-        {result?.images.length ? (
+        {allImages.length ? (
           <div className="recent-images">
-            {result.images.map((image) => (
+            {allImages.map((image) => (
               <img key={image.id} src={image.url} alt="Generated output" />
             ))}
           </div>
@@ -40,7 +42,11 @@ export function StatusPanel({
           <Clock size={17} />
           <h2>Run Details</h2>
         </header>
-        {result ? <textarea readOnly value={result.prompt} /> : <p className="muted">No compiled prompt yet.</p>}
+        {hasResults ? (
+          <textarea readOnly value={Array.from(outputResults.values()).map((r) => r.prompt).join('\n\n---\n\n')} />
+        ) : (
+          <p className="muted">No compiled prompt yet.</p>
+        )}
       </section>
     </footer>
   );

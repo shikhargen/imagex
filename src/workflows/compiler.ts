@@ -13,22 +13,54 @@ export function compileWorkflow(workflow: ImageXWorkflow): CompiledWorkflow {
 
   return {
     prompt,
-    options: {
-      prompt,
-      model: stringField(output, 'model', 'gpt-image-2'),
-      size: enumField(
-        output,
-        'size',
-        ['auto', '1024x1024', '1536x1024', '1024x1536', '2048x2048', '2048x1152', '3840x2160', '2160x3840'],
-        '1024x1024'
-      ),
-      outputFormat: enumField(output, 'format', ['png', 'jpeg', 'webp'], 'png'),
-      background: enumField(output, 'background', ['transparent', 'opaque', 'auto'], 'auto'),
-      quality: enumField(output, 'quality', ['low', 'medium', 'high', 'auto'], 'auto'),
-      count: numberField(output, 'count', 1, 1, 4),
-      workflowName: workflow.name,
-      references,
-    },
+    options: buildOptions(prompt, output, workflow.name, references),
+  };
+}
+
+export function compileOutputNodeWorkflow(workflow: ImageXWorkflow, nodeId: string): CompiledWorkflow | null {
+  const context = graphContext(workflow);
+  const output = context.nodesById.get(nodeId);
+  if (!output || output.type !== 'output') return null;
+
+  const compiled = compileOutputNode(output, context, new Set());
+  if (!isMeaningfulObject(compiled)) return null;
+
+  const rawPrompt = {
+    useCase: workflow.settings.useCase || 'stylized-concept',
+    assetType: 'imagex generated workflow output',
+    instruction:
+      'Generate one image from this structured workflow. Treat node fields as reusable creative components. Preserve explicit user values and do not invent unrelated logos, watermarks, or extra text.',
+    outputs: [compiled],
+  };
+
+  const references: ImageReference[] = [];
+  const nextIndex = { value: 1 };
+  const seenPaths = new Map<string, string>();
+  const promptJson = assignImagePositions(rawPrompt, nextIndex, references, seenPaths);
+  const prompt = JSON.stringify(promptJson, null, 2);
+
+  return {
+    prompt,
+    options: buildOptions(prompt, output, workflow.name, references),
+  };
+}
+
+function buildOptions(prompt: string, output: ImageXNode | undefined, workflowName: string, references: ImageReference[]): ImageGenerationOptions {
+  return {
+    prompt,
+    model: stringField(output, 'model', 'gpt-image-2'),
+    size: enumField(
+      output,
+      'size',
+      ['auto', '1024x1024', '1536x1024', '1024x1536', '2048x2048', '2048x1152', '3840x2160', '2160x3840'],
+      '1024x1024'
+    ),
+    outputFormat: enumField(output, 'format', ['png', 'jpeg', 'webp'], 'png'),
+    background: enumField(output, 'background', ['transparent', 'opaque', 'auto'], 'auto'),
+    quality: enumField(output, 'quality', ['low', 'medium', 'high', 'auto'], 'auto'),
+    count: numberField(output, 'count', 1, 1, 4),
+    workflowName,
+    references,
   };
 }
 
@@ -56,22 +88,29 @@ function buildPromptAndReferences(workflow: ImageXWorkflow, context: GraphContex
 
   const references: ImageReference[] = [];
   const nextIndex = { value: 1 };
-  const promptJson = assignImagePositions(rawPrompt, nextIndex, references);
+  const seenPaths = new Map<string, string>();
+  const promptJson = assignImagePositions(rawPrompt, nextIndex, references, seenPaths);
 
   return { promptJson, references };
 }
 
-function assignImagePositions(value: unknown, nextIndex: { value: number }, refs: ImageReference[]): unknown {
+function assignImagePositions(value: unknown, nextIndex: { value: number }, refs: ImageReference[], seenPaths: Map<string, string>): unknown {
   if (Array.isArray(value)) {
-    return value.map((item) => assignImagePositions(item, nextIndex, refs));
+    return value.map((item) => assignImagePositions(item, nextIndex, refs, seenPaths));
   }
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>;
     if ('__imagex_image' in record) {
-      const position = `[image-${nextIndex.value++}]`;
       const { __imagex_image: _marker, path, role, notes, ...rest } = record;
+      const pathKey = String(path || '');
+      const existingPosition = seenPaths.get(pathKey);
+      if (existingPosition) {
+        return { type: 'image', position: existingPosition, role: String(role || 'reference'), notes: String(notes || ''), ...rest };
+      }
+      const position = `[image-${nextIndex.value++}]`;
+      seenPaths.set(pathKey, position);
       refs.push({
-        name: String(path || ''),
+        name: pathKey,
         role: String(role || 'reference'),
         notes: String(notes || ''),
         position,
@@ -80,7 +119,7 @@ function assignImagePositions(value: unknown, nextIndex: { value: number }, refs
     }
     const result: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(record)) {
-      result[key] = assignImagePositions(val, nextIndex, refs);
+      result[key] = assignImagePositions(val, nextIndex, refs, seenPaths);
     }
     return result;
   }
@@ -133,7 +172,7 @@ function compileOutputInputs(output: ImageXNode, context: GraphContext, seen: Se
     characters: compileHandleInputs(output.id, 'character-in', context, seen),
     styles: compileHandleInputs(output.id, 'style-in', context, seen),
     scenes: compileHandleInputs(output.id, 'scene-in', context, seen),
-    imageInputs: compileHandleInputs(output.id, 'image-in', context, seen),
+    imageInputs: compileHandleInputs(output.id, 'image-in', context, seen).filter((item) => !isOutputMarker(item)),
   };
 }
 
@@ -199,7 +238,7 @@ function compileConnectedNode(node: ImageXNode, context: GraphContext, seen: Set
       return { __imagex_image: true, ...fields };
     }
     case 'output':
-      return compileOutputNode(node, context, seen);
+      return { __imagex_output: true, id: node.id };
     case 'frame':
       return compileNodeFields(node, ['title', 'notes'], context, nextSeen);
     case 'custom':
@@ -228,9 +267,15 @@ function compileCustomNode(node: ImageXNode, context: GraphContext, seen: Set<st
   return compiled;
 }
 
+function isOutputMarker(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  return '__imagex_output' in (value as Record<string, unknown>);
+}
+
 function isMeaningfulObject(value: unknown): boolean {
   if (value === undefined || value === null) return false;
   if (typeof value !== 'object') return true;
+  if (isOutputMarker(value)) return false;
   return Object.keys(value).length > 0;
 }
 

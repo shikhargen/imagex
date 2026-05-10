@@ -13,6 +13,7 @@ import type {
   ImageXTemplateSummary,
   ImageXWorkflow,
   NodeType,
+  OutputNodeResult,
 } from '../../shared/types.js';
 import { FlowEditor } from './editor/FlowEditor.js';
 import { InspectorPanel, InspectorToggle } from './editor/InspectorPanel.js';
@@ -89,7 +90,7 @@ export function App() {
   const [edges, setEdges] = useState<UiEdge[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState('Loading workspace...');
-  const [result, setResult] = useState<GenerateWorkflowResponse | null>(null);
+  const [outputResults, setOutputResults] = useState<Map<string, OutputNodeResult>>(new Map());
   const [menu, setMenu] = useState<FloatingMenu>(null);
   const [promptOverlay, setPromptOverlay] = useState<{ prompt: string } | null>(null);
   const [assets, setAssets] = useState<ImageXAsset[]>([]);
@@ -401,7 +402,7 @@ export function App() {
     void refreshAssets(nextProject.metadata.id);
     void refreshNodeAssets(nextProject.metadata.id);
     setSelectedId(Array.isArray(nextProject.workflow.nodes) ? nextProject.workflow.nodes[0]?.id ?? null : null);
-    setResult(null);
+    setOutputResults(new Map());
     setStatus('Ready');
   }
 
@@ -433,7 +434,7 @@ export function App() {
     setNodes([]);
     setEdges([]);
     setSelectedId(null);
-    setResult(null);
+    setOutputResults(new Map());
     setMenu(null);
     setPromptOverlay(null);
     setStatus('Dashboard');
@@ -1261,7 +1262,6 @@ export function App() {
   async function runWorkflow() {
     if (!workflow || !project) return;
     setStatus('Generating...');
-    setResult(null);
 
     const nextWorkflow = syncFlowToWorkflow(workflow, nodes, edges);
     setWorkflow(nextWorkflow);
@@ -1279,27 +1279,33 @@ export function App() {
     }
 
     const data = (await response.json()) as GenerateWorkflowResponse;
-    setResult(data);
-    setStatus(`Generated ${data.images.length} image${data.images.length === 1 ? '' : 's'}`);
-
-    const previewUrl = data.images[0]?.url;
-    if (previewUrl) {
-      const withPreview = {
-        ...nextWorkflow,
-        nodes: nextWorkflow.nodes.map((node) =>
-          node.type === 'output' ? { ...node, data: { ...node.data, previewUrl } } : node
-        ),
-      };
-      applyWorkflow(withPreview);
-      void fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflow`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow: withPreview }),
-      });
+    const newResults = new Map<string, OutputNodeResult>();
+    let totalImages = 0;
+    for (const r of data.results) {
+      newResults.set(r.outputNodeId, r);
+      totalImages += r.images.length;
     }
+    setOutputResults(newResults);
+    setStatus(`Generated ${totalImages} image${totalImages === 1 ? '' : 's'}`);
+
+    const withPreviews = {
+      ...nextWorkflow,
+      nodes: nextWorkflow.nodes.map((node) => {
+        if (node.type !== 'output') return node;
+        const result = newResults.get(node.id);
+        const previewUrl = result?.images[0]?.url;
+        return previewUrl ? { ...node, data: { ...node.data, previewUrl } } : node;
+      }),
+    };
+    applyWorkflow(withPreviews);
+    void fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflow`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workflow: withPreviews }),
+    });
   }
 
-  async function showCompiledPrompt() {
+  async function showCompiledPrompt(nodeId?: string) {
     const currentProject = projectRef.current;
     const currentWorkflow = workflowRef.current;
     if (!currentWorkflow || !currentProject) {
@@ -1311,7 +1317,7 @@ export function App() {
       const response = await fetch(`/api/projects/${encodeURIComponent(currentProject.metadata.id)}/compile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow: nextWorkflow }),
+        body: JSON.stringify({ workflow: nextWorkflow, outputNodeId: nodeId }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({ error: response.statusText }));
@@ -1484,7 +1490,7 @@ export function App() {
       </section>
       {rightOpen && <ResizeHandle side="right" onResize={setRightWidth} min={280} max={520} />}
       {rightOpen ? (
-        <InspectorPanel node={selectedNode} onChange={updateNodeData} result={result} onClose={() => setRightOpen(false)} />
+        <InspectorPanel node={selectedNode} onChange={updateNodeData} outputResults={outputResults} onClose={() => setRightOpen(false)} />
       ) : (
         <InspectorToggle onOpen={() => setRightOpen(true)} />
       )}

@@ -182,7 +182,7 @@ function BaseNode({ data, selected, preview, frame }: Props & { preview?: boolea
             onPointerDown={(event) => {
               event.stopPropagation();
               event.preventDefault();
-              data.onShowPrompt?.();
+              data.onShowPrompt?.(node.id);
             }}
             onClick={(event) => {
               event.stopPropagation();
