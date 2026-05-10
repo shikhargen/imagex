@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
-import { Box, Component, FileText, Frame, Image, Layers3, MapPin, Palette, UserRound, X } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from 'react';
+import { Box, Component, FileText, Frame, Image, Layers3, MapPin, Palette, X } from 'lucide-react';
 import type {
   CustomFieldDefinition,
   CustomFieldKind,
@@ -713,9 +713,12 @@ export function App() {
       const index = fields.findIndex((field) => field.id === fieldId);
       if (index === -1) return fields;
       const source = fields[index]!;
+      const copyId = `field-${crypto.randomUUID().slice(0, 8)}`;
+      // Guard against double-invocation
+      if (fields.some((f) => f.id === copyId)) return fields;
       const copy: CustomFieldDefinition = {
         ...source,
-        id: `field-${crypto.randomUUID().slice(0, 8)}`,
+        id: copyId,
         label: `${source.label} Copy`,
       };
       setActiveFieldRef({ nodeId, fieldId: copy.id });
@@ -1053,7 +1056,7 @@ export function App() {
 
   function addImageAssetNode(asset: ImageXAsset) {
     const position = flowApiRef.current?.screenToFlowPosition(lastMousePosRef.current) || { x: 160, y: 140 };
-    const node = createUiWorkflowNode('imageInput', position);
+    const node = createUiWorkflowNode('image', position);
     node.data = {
       ...node.data,
       path: asset.file,
@@ -1318,7 +1321,7 @@ export function App() {
     const withPreviews = {
       ...nextWorkflow,
       nodes: nextWorkflow.nodes.map((node) => {
-        if (node.type !== 'output') return node;
+        if (node.type !== 'codex-output') return node;
         const result = newResults.get(node.id);
         const previewUrl = result?.images[0]?.url;
         return previewUrl ? { ...node, data: { ...node.data, previewUrl } } : node;
@@ -1602,7 +1605,7 @@ function createCustomFieldDefinition(kind: CustomFieldKind): CustomFieldDefiniti
   const id = `field-${crypto.randomUUID().slice(0, 8)}`;
   switch (kind) {
     case 'textarea':
-      return { id, label: 'Long Text', kind, value: '' };
+      return { id, label: 'Text', kind, value: '' };
     case 'select':
       return { id, label: 'Selector', kind, value: 'option 1', options: ['option 1', 'option 2'] };
     case 'slider':
@@ -1611,10 +1614,6 @@ function createCustomFieldDefinition(kind: CustomFieldKind): CustomFieldDefiniti
       return { id, label: 'Number', kind, value: 0 };
     case 'toggle':
       return { id, label: 'Toggle', kind, value: false };
-    case 'inputSocket':
-      return { id, label: 'Input', kind };
-    case 'outputSocket':
-      return { id, label: 'Output', kind };
     case 'text':
     default:
       return { id, label: 'Text', kind: 'text', value: '' };
@@ -1670,16 +1669,8 @@ function FloatingContextMenu({
 }) {
   const actions: Array<[string, string]> =
     menu.type === 'pane'
-      ? [
-          ['add:text', 'Add Text Node'],
-          ['add:imageInput', 'Add Image Input'],
-          ['add:character', 'Add Character'],
-          ['add:style', 'Add Style'],
-          ['add:scene', 'Add Scene'],
-          ['add:output', 'Add Output'],
-          ['add:frame', 'Add Frame'],
-          ['add:custom', 'Add Custom Node'],
-        ]
+      ? nodeChoices.map(({ type, label }) => [`add:${type}`, `Add ${label}`] as [string, string])
+
       : menu.type === 'workflow'
         ? [
             ['rename', 'Rename'],
@@ -1892,14 +1883,14 @@ function ConfirmDialog({
 }
 
 const nodeChoices: Array<{ type: NodeType; label: string; description: string; icon: ComponentType<{ size?: number }> }> = [
-  { type: 'text', label: 'Text', description: 'Prompt text fragment', icon: FileText },
-  { type: 'character', label: 'Character', description: 'Identity, outfit, mood', icon: UserRound },
-  { type: 'style', label: 'Style', description: 'Visual language', icon: Palette },
-  { type: 'scene', label: 'Scene', description: 'Environment and shot', icon: MapPin },
-  { type: 'imageInput', label: 'Image Input', description: 'Reference or edit target', icon: Image },
-  { type: 'output', label: 'Output', description: 'Generation target', icon: Box },
+  { type: 'prompt', label: 'Prompt', description: 'Prompt text fragment', icon: FileText },
+  { type: 'image', label: 'Image', description: 'Reference or edit target', icon: Image },
+  { type: 'color', label: 'Color', description: 'Color picker', icon: Palette },
+  { type: 'file', label: 'File', description: 'Document attachment', icon: Component },
+  { type: 'codex-output', label: 'Output', description: 'Generation target', icon: Box },
+  { type: 'color-balance', label: 'Color Balance', description: 'RGB/HSL adjustment', icon: Layers3 },
+  { type: 'rotate-flip', label: 'Rotate/Flip', description: 'Rotation and flip', icon: MapPin },
   { type: 'frame', label: 'Frame', description: 'Group nodes visually', icon: Frame },
-  { type: 'custom', label: 'Custom', description: 'Build your own node', icon: Component },
 ];
 
 function AssetsModal({

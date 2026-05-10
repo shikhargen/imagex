@@ -1,50 +1,14 @@
 import type { CustomFieldDefinition, ImageXNode, NodeType } from '../../../../shared/types.js';
 
-export type BuiltInFieldDefinition = CustomFieldDefinition & {
-  nodeTypes: NodeType[];
-};
-
 export const builtInFieldDefinitions: Record<NodeType, CustomFieldDefinition[]> = {
-  text: [{ id: 'text', label: 'Text', kind: 'textarea', value: '' }],
-  character: [
-    { id: 'name', label: 'Name', kind: 'text', value: '' },
-    { id: 'description', label: 'Description', kind: 'textarea', value: '', accepts: ['prompt', 'image'] },
-    { id: 'traits', label: 'Traits', kind: 'text', value: '', accepts: ['prompt', 'image'] },
-    { id: 'clothing', label: 'Clothing', kind: 'text', value: '', accepts: ['prompt', 'image'] },
-    { id: 'mood', label: 'Mood', kind: 'text', value: '', accepts: ['prompt', 'image'] },
+  prompt: [{ id: 'text', label: 'Text', kind: 'textarea', value: '' }],
+  image: [
+    { id: 'image', label: 'Image', kind: 'image', value: '' },
+    { id: 'description', label: 'Description', kind: 'textarea', value: '' },
   ],
-  style: [
-    { id: 'name', label: 'Name', kind: 'text', value: '' },
-    {
-      id: 'medium',
-      label: 'Medium',
-      kind: 'select',
-      value: 'digital illustration',
-      options: ['digital illustration', 'photorealistic', '3D render', 'manga', 'pixel art', 'watercolor'],
-    },
-    { id: 'palette', label: 'Palette', kind: 'text', value: '', accepts: ['prompt', 'image'] },
-    { id: 'description', label: 'Description', kind: 'textarea', value: '', accepts: ['prompt', 'image'] },
-    { id: 'visualConstraints', label: 'Visual Constraints', kind: 'text', value: '', accepts: ['prompt', 'image'] },
-  ],
-  scene: [
-    { id: 'environment', label: 'Environment', kind: 'textarea', value: '', accepts: ['prompt', 'image'] },
-    { id: 'lighting', label: 'Lighting', kind: 'textarea', value: '', accepts: ['prompt', 'image'] },
-    { id: 'camera', label: 'Camera', kind: 'text', value: '', accepts: ['prompt', 'image'] },
-    { id: 'mood', label: 'Mood', kind: 'text', value: '', accepts: ['prompt', 'image'] },
-    { id: 'weather', label: 'Weather', kind: 'text', value: '', accepts: ['prompt', 'image'] },
-  ],
-  imageInput: [
-    { id: 'path', label: 'Path', kind: 'text', value: '' },
-    {
-      id: 'role',
-      label: 'Role',
-      kind: 'select',
-      value: 'reference',
-      options: ['reference', 'edit target', 'style reference', 'composition reference'],
-    },
-    { id: 'notes', label: 'Notes', kind: 'textarea', value: '', accepts: ['prompt', 'image'] },
-  ],
-  output: [
+  color: [{ id: 'color', label: 'Color', kind: 'color', value: '#ffffff' }],
+  file: [{ id: 'filename', label: 'File', kind: 'text', value: '' }],
+  'codex-output': [
     {
       id: 'size',
       label: 'Size',
@@ -57,25 +21,33 @@ export const builtInFieldDefinitions: Record<NodeType, CustomFieldDefinition[]> 
     { id: 'background', label: 'Background', kind: 'select', value: 'auto', options: ['auto', 'opaque', 'transparent'] },
     { id: 'count', label: 'Count', kind: 'slider', value: 1, min: 1, max: 4, step: 1 },
   ],
+  'color-balance': [
+    { id: 'red', label: 'Red', kind: 'slider', value: 0, min: -100, max: 100, step: 1 },
+    { id: 'green', label: 'Green', kind: 'slider', value: 0, min: -100, max: 100, step: 1 },
+    { id: 'blue', label: 'Blue', kind: 'slider', value: 0, min: -100, max: 100, step: 1 },
+  ],
+  'rotate-flip': [
+    { id: 'rotate', label: 'Rotate', kind: 'select', value: '0', options: ['0', '90', '180', '270'] },
+    { id: 'flipH', label: 'Flip Horizontal', kind: 'toggle', value: false },
+    { id: 'flipV', label: 'Flip Vertical', kind: 'toggle', value: false },
+  ],
   frame: [],
-  custom: [],
 };
 
 export function fieldDefinitionsFor(node: ImageXNode): CustomFieldDefinition[] {
-  if (node.type === 'custom') return customFieldDefinitions(node);
-  return builtInFieldDefinitions[node.type];
+  const builtIn = builtInFieldDefinitions[node.type];
+  const dynamic = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
+  return [...builtIn, ...dynamic];
 }
 
 export function editableFieldDefinitionsFor(node: ImageXNode): CustomFieldDefinition[] {
-  return fieldDefinitionsFor(node).filter((field) => field.kind !== 'outputSocket');
-}
-
-export function customFieldDefinitions(node: ImageXNode): CustomFieldDefinition[] {
-  return Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
+  return fieldDefinitionsFor(node);
 }
 
 export function customFieldValue(node: ImageXNode, field: CustomFieldDefinition): unknown {
-  if (node.type === 'custom') return field.value;
+  // Dynamic fields store value in the field definition itself
+  const dynamic = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
+  if (dynamic.some((f) => f.id === field.id)) return field.value;
   return node.data[field.id];
 }
 

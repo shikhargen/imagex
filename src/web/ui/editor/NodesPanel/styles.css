@@ -1,8 +1,23 @@
 .node-panel-list {
   display: grid;
   align-content: start;
-  gap: 1px;
+  gap: var(--ui-space-4);
   padding: 0 var(--ui-space-3);
+}
+
+.node-panel-group {
+  display: grid;
+  align-content: start;
+  gap: 1px;
+}
+
+.node-panel-group-label {
+  padding: var(--ui-space-1) var(--ui-space-3);
+  color: var(--ui-text-dim);
+  font-size: 0.583rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .node-panel-item {

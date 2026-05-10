@@ -177,40 +177,51 @@ export function createUiWorkflowNode(type: NodeType, position: { x: number; y: n
 
 function defaultDataFor(type: NodeType): Record<string, unknown> {
   switch (type) {
-    case 'text':
-      return { text: 'Describe the image goal here.' };
-    case 'character':
+    case 'prompt':
       return {
-        name: 'New Character',
-        description: 'Identity, silhouette, clothing, and recurring traits.',
-        mood: 'focused',
+        title: 'Prompt',
+        text: '',
+        fields: [],
       };
-    case 'style':
+    case 'image':
       return {
-        name: 'New Style',
-        medium: 'digital illustration',
-        palette: 'balanced contrast',
-        description: 'Rendering style and visual constraints.',
+        title: 'Image',
+        description: '',
+        fields: [],
       };
-    case 'scene':
+    case 'color':
       return {
-        environment: 'Describe the setting.',
-        lighting: 'natural cinematic lighting',
-        camera: 'medium shot',
+        title: 'Color',
+        color: '#ffffff',
       };
-    case 'imageInput':
+    case 'file':
       return {
-        path: '',
-        role: 'reference',
-        notes: 'How this image should influence generation.',
+        title: 'File',
+        filename: '',
+        content: '',
       };
-    case 'output':
+    case 'codex-output':
       return {
+        title: 'Output',
         size: '1024x1024',
         quality: 'auto',
         format: 'png',
         background: 'auto',
         count: 1,
+      };
+    case 'color-balance':
+      return {
+        title: 'Color Balance',
+        red: 0,
+        green: 0,
+        blue: 0,
+      };
+    case 'rotate-flip':
+      return {
+        title: 'Rotate & Flip',
+        rotate: '0',
+        flipH: false,
+        flipV: false,
       };
     case 'frame':
       return {
@@ -219,10 +230,7 @@ function defaultDataFor(type: NodeType): Record<string, unknown> {
         width: 520,
         height: 360,
       };
-    case 'custom':
-      return {
-        title: 'Custom Node',
-        fields: [],
-      };
+    default:
+      return {};
   }
 }

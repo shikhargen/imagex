@@ -228,7 +228,7 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
   app.post('/api/projects/:projectId/generate', async (req: Request<{ projectId: string }, unknown, GenerateWorkflowRequest>, res, next) => {
     try {
       const projectId = req.params.projectId;
-      const outputNodes = req.body.workflow.nodes.filter((n) => n.type === 'output');
+      const outputNodes = req.body.workflow.nodes.filter((n) => n.type === 'codex-output');
       log('generate', 'starting workflow generation', { projectId, outputNodes: outputNodes.length });
       const bearerToken = await resolveCodexBearerToken();
       const results = await executeWorkflowOutputNodes(
@@ -247,7 +247,8 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
 
   async function resolveImageReferences(
     projectId: string,
-    references?: Array<{ name: string; role: string; notes: string; position: string }>
+    references?: Array<{ name: string; role: string; notes: string; position: string }>,
+    generatedResults?: Map<string, GeneratedImage[]>
   ): Promise<Array<{ name: string; role: string; notes: string; position: string; dataUrl: string }>> {
     if (!references || references.length === 0) return [];
 
@@ -255,7 +256,51 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     const resolved: Array<{ name: string; role: string; notes: string; position: string; dataUrl: string }> = [];
 
     for (const ref of references) {
-      const asset = assets.find((a) => a.name === ref.name);
+      // Handle output node references (__output:nodeId)
+      if (ref.name.startsWith('__output:') && generatedResults) {
+        const outputNodeId = ref.name.slice('__output:'.length);
+        const images = generatedResults.get(outputNodeId) || [];
+        if (images.length > 0) {
+          const img = images[0]!;
+          const file = await readFile(img.path);
+          const ext = extname(img.path).slice(1) || 'png';
+          const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+          resolved.push({
+            name: ref.name,
+            role: ref.role,
+            notes: ref.notes,
+            position: ref.position,
+            dataUrl: `data:${mimeType};base64,${file.toString('base64')}`,
+          });
+        }
+        continue;
+      }
+
+      // Handle asset URL references (path starts with /api/)
+      if (ref.name.startsWith('/api/')) {
+        // Extract asset ID from URL like /api/projects/xxx/asset-files/asset-id
+        const parts = ref.name.split('/');
+        const assetId = parts[parts.length - 1] || '';
+        const assetPath = await projectAssetPath(projectId, assetId);
+        try {
+          const file = await readFile(assetPath);
+          const ext = extname(assetPath).slice(1) || 'png';
+          const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+          resolved.push({
+            name: ref.name,
+            role: ref.role,
+            notes: ref.notes,
+            position: ref.position,
+            dataUrl: `data:${mimeType};base64,${file.toString('base64')}`,
+          });
+        } catch {
+          log('resolver', 'failed to read asset file', { assetId, path: assetPath });
+        }
+        continue;
+      }
+
+      // Handle asset name references
+      const asset = assets.find((a) => a.name === ref.name || a.file === ref.name);
       if (!asset) continue;
 
       const assetPath = await projectAssetPath(projectId, asset.id);
@@ -395,7 +440,7 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     bearerToken: string,
     projectId?: string
   ): Promise<OutputNodeResult[]> {
-    const outputNodes = workflow.nodes.filter((n) => n.type === 'output');
+    const outputNodes = workflow.nodes.filter((n) => n.type === 'codex-output');
     if (outputNodes.length === 0) {
       log('executor', 'no output nodes found');
       return [];
@@ -403,16 +448,32 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
 
     log('executor', 'discovered output nodes', { count: outputNodes.length, ids: outputNodes.map((n) => n.id) });
 
-    // Build dependency graph: targetId -> Set of source output node ids
+    // Build dependency graph: targetOutputId -> Set of source output node ids
+    // Trace through intermediate nodes (an output node may connect through image nodes)
     const dependencies = new Map<string, Set<string>>();
-    for (const edge of workflow.edges) {
-      const source = workflow.nodes.find((n) => n.id === edge.source);
-      const target = workflow.nodes.find((n) => n.id === edge.target);
-      if (!source || !target) continue;
-      if (source.type !== 'output' || target.type !== 'output') continue;
-      if (edge.sourceHandle === 'result-out' && edge.targetHandle === 'image-in') {
-        if (!dependencies.has(target.id)) dependencies.set(target.id, new Set());
-        dependencies.get(target.id)!.add(source.id);
+    const outputNodeIds = new Set(outputNodes.map((n) => n.id));
+
+    function findUpstreamOutputNodes(nodeId: string, visited: Set<string>): string[] {
+      if (visited.has(nodeId)) return [];
+      visited.add(nodeId);
+      const found: string[] = [];
+      for (const edge of workflow.edges) {
+        if (edge.target !== nodeId) continue;
+        const sourceId = edge.source;
+        if (outputNodeIds.has(sourceId)) {
+          found.push(sourceId);
+        } else {
+          // Trace through intermediate nodes
+          found.push(...findUpstreamOutputNodes(sourceId, visited));
+        }
+      }
+      return found;
+    }
+
+    for (const outputNode of outputNodes) {
+      const upstreamOutputs = findUpstreamOutputNodes(outputNode.id, new Set([outputNode.id]));
+      if (upstreamOutputs.length > 0) {
+        dependencies.set(outputNode.id, new Set(upstreamOutputs));
       }
     }
 
@@ -458,15 +519,15 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
       const { prompt, options } = compiled;
       log('executor', 'compiled output node', { outputNodeId, refs: options.references?.length || 0 });
 
-      // Resolve static image references
+      // Resolve static image references (assets) and output node references
+      const upstreamIds = dependencies.get(outputNodeId) || new Set();
       if (projectId) {
-        const resolved = await resolveImageReferences(projectId, options.references);
+        const resolved = await resolveImageReferences(projectId, options.references, results);
         options.references = resolved;
         log('executor', 'resolved image references', { outputNodeId, resolved: resolved.length });
       }
 
-      // Gather upstream generated images from dependent output nodes
-      const upstreamIds = dependencies.get(outputNodeId) || new Set();
+      // Gather upstream generated images from dependent output nodes as extra images
       const extraImages: Array<{ dataUrl: string }> = [];
       for (const upstreamId of upstreamIds) {
         const upstreamImages = results.get(upstreamId) || [];

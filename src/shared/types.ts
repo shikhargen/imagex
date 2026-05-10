@@ -1,33 +1,80 @@
+// ─── Node Categories ─────────────────────────────────────────────────────────
+// Primitives: user-editable, can have fields added/removed, renamable
+// LLM Output: hardcoded config, not user-editable fields, generates images
+// Image Editing: takes image input, has fixed controls, shows preview
+
+export type NodeCategory = 'primitive' | 'llm-output' | 'image-editing';
+
 export type NodeType =
-  | 'text'
-  | 'imageInput'
-  | 'character'
-  | 'style'
-  | 'scene'
-  | 'output'
-  | 'frame'
-  | 'custom';
+  // Primitives (addable fields, renamable)
+  | 'prompt'        // text/prompt node - has text fields, chainable
+  | 'image'         // image reference - description + image upload
+  | 'color'         // color picker → outputs hex string
+  | 'file'          // document attachment → converted to text
+  // LLM Output (hardcoded config)
+  | 'codex-output'  // OpenAI image generation with config sliders/dropdowns
+  // Image Editing (fixed controls + preview)
+  | 'color-balance' // RGB/HSL sliders on an image
+  | 'rotate-flip'   // rotation + flip toggles
+  // Layout
+  | 'frame';        // grouping container (no ports)
 
-export type CustomFieldKind =
-  | 'text'
-  | 'textarea'
-  | 'select'
-  | 'slider'
-  | 'number'
-  | 'toggle'
-  | 'inputSocket'
-  | 'outputSocket';
+// ─── Socket/Port Types ───────────────────────────────────────────────────────
+export type SocketType = 'text' | 'image' | 'color' | 'file' | 'any';
 
-export type CustomFieldDefinition = {
+// ─── Field System ────────────────────────────────────────────────────────────
+export type FieldKind =
+  | 'text'       // single-line text input
+  | 'textarea'   // multi-line text area
+  | 'image'      // image upload/picker
+  | 'color'      // color picker
+  | 'file'       // file attachment
+  | 'select'     // dropdown select
+  | 'slider'     // numeric slider
+  | 'number'     // numeric input
+  | 'toggle';    // boolean switch
+
+// Compat alias used internally
+export type CustomFieldKind = FieldKind;
+
+export type FieldDefinition = {
   id: string;
   label: string;
-  kind: CustomFieldKind;
+  kind: FieldKind;
   value?: string | number | boolean;
-  options?: string[];
-  min?: number;
+  options?: string[];          // for 'select'
+  min?: number;                // for 'slider'/'number'
   max?: number;
   step?: number;
-  accepts?: string[];
+  placeholder?: string;
+  removable?: boolean;         // can user remove this field?
+  socketType?: SocketType;     // if this field can receive a connection
+  accepts?: string[];          // port compatibility (legacy compat)
+};
+
+// Compat alias
+export type CustomFieldDefinition = FieldDefinition;
+
+// ─── Node Data ───────────────────────────────────────────────────────────────
+export type ImageXNode = {
+  id: string;
+  type: NodeType;
+  position: { x: number; y: number };
+  data: Record<string, unknown>;
+  // Common data shape:
+  // title?: string           -- user-defined name (renamable)
+  // fields?: FieldDefinition[] -- dynamic fields for primitives
+  // For codex-output: size, quality, format, background, count, model
+  // For color-balance: image input, r/g/b offsets
+  // For rotate-flip: image input, rotate degrees, flipH, flipV
+};
+
+export type ImageXEdge = {
+  id: string;
+  source: string;
+  sourceHandle?: string;
+  target: string;
+  targetHandle?: string;
 };
 
 export type ImageXWorkflow = {
@@ -41,6 +88,12 @@ export type ImageXWorkflow = {
   settings: WorkflowSettings;
 };
 
+export type WorkflowSettings = {
+  provider: 'openai-codex';
+  useCase?: string;
+};
+
+// ─── Project & Assets ────────────────────────────────────────────────────────
 export type ImageXProjectMetadata = {
   app: 'imagex';
   schemaVersion: 1;
@@ -97,26 +150,7 @@ export type ImageXNodeAsset = {
   updatedAt: string;
 };
 
-export type ImageXNode = {
-  id: string;
-  type: NodeType;
-  position: { x: number; y: number };
-  data: Record<string, unknown>;
-};
-
-export type ImageXEdge = {
-  id: string;
-  source: string;
-  sourceHandle?: string;
-  target: string;
-  targetHandle?: string;
-};
-
-export type WorkflowSettings = {
-  provider: 'openai-codex';
-  useCase?: string;
-};
-
+// ─── Generation ──────────────────────────────────────────────────────────────
 export type ImageReference = {
   name: string;
   role: string;

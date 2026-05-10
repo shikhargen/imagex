@@ -1,7 +1,7 @@
 import type { CustomFieldDefinition, ImageXNode, NodeType } from '../../../shared/types.js';
-import { builtInFieldDefinitions, editableFieldDefinitionsFor, fieldDefinitionsFor, labelForFieldId } from './fields/definitions.js';
+import { builtInFieldDefinitions } from './fields/definitions.js';
 
-export type PortKind = 'prompt' | 'character' | 'style' | 'scene' | 'image' | 'result';
+export type PortKind = 'text' | 'image' | 'result';
 
 export type NodePort = {
   id: string;
@@ -11,96 +11,65 @@ export type NodePort = {
   field?: string;
 };
 
-export const editableFields: Record<NodeType, string[]> = {
-  text: ['text'],
-  character: ['name', 'description', 'traits', 'clothing', 'mood'],
-  style: ['name', 'medium', 'palette', 'description', 'visualConstraints'],
-  scene: ['environment', 'lighting', 'camera', 'mood', 'weather'],
-  imageInput: ['path', 'role', 'notes'],
-  output: ['size', 'quality', 'format', 'background', 'count'],
-  frame: [],
-  custom: [],
-};
-
 export function fieldHandleId(field: string): string {
   return `field:${field}`;
 }
 
-function fieldPorts(type: NodeType): NodePort[] {
-  return builtInFieldDefinitions[type]
-    .filter((field) => editableFields[type].includes(field.id))
-    .map((field) => ({
-      id: fieldHandleId(field.id),
-      label: field.label,
-      kind: 'prompt',
-      ...(field.accepts ? { accepts: field.accepts as PortKind[] } : {}),
-      field: field.id,
-    }));
-}
-
 export const inputPorts: Record<NodeType, NodePort[]> = {
-  text: fieldPorts('text'),
-  character: fieldPorts('character'),
-  style: fieldPorts('style'),
-  scene: fieldPorts('scene'),
-  imageInput: fieldPorts('imageInput'),
-  output: [
-    { id: 'prompt-in', label: 'Prompt', kind: 'prompt', accepts: ['prompt'] },
-    { id: 'character-in', label: 'Character', kind: 'character', accepts: ['character'] },
-    { id: 'style-in', label: 'Style', kind: 'style', accepts: ['style'] },
-    { id: 'scene-in', label: 'Scene', kind: 'scene', accepts: ['scene'] },
-    { id: 'image-in', label: 'Reference', kind: 'image', accepts: ['image', 'result'] },
-    ...fieldPorts('output'),
+  prompt: [],
+  image: [],
+  color: [],
+  file: [],
+  'codex-output': [
+    { id: 'prompt-in', label: 'Prompt', kind: 'text', accepts: ['text'] },
+    { id: 'image-in', label: 'Image', kind: 'image', accepts: ['image', 'result'] },
+  ],
+  'color-balance': [
+    { id: 'image-in', label: 'Image', kind: 'image', accepts: ['image', 'result'] },
+  ],
+  'rotate-flip': [
+    { id: 'image-in', label: 'Image', kind: 'image', accepts: ['image', 'result'] },
   ],
   frame: [],
-  custom: [],
 };
 
 export const outputPorts: Record<NodeType, NodePort[]> = {
-  text: [{ id: 'prompt-out', label: 'Prompt', kind: 'prompt' }],
-  character: [{ id: 'character-out', label: 'Character', kind: 'character' }],
-  style: [{ id: 'style-out', label: 'Style', kind: 'style' }],
-  scene: [{ id: 'scene-out', label: 'Scene', kind: 'scene' }],
-  imageInput: [{ id: 'image-out', label: 'Image', kind: 'image' }],
-  output: [{ id: 'result-out', label: 'Result', kind: 'result' }],
+  prompt: [{ id: 'text-out', label: 'Text', kind: 'text' }],
+  image: [{ id: 'image-out', label: 'Image', kind: 'image' }],
+  color: [{ id: 'text-out', label: 'Color', kind: 'text' }],
+  file: [{ id: 'text-out', label: 'Text', kind: 'text' }],
+  'codex-output': [{ id: 'result-out', label: 'Image', kind: 'result' }],
+  'color-balance': [{ id: 'image-out', label: 'Image', kind: 'image' }],
+  'rotate-flip': [{ id: 'image-out', label: 'Image', kind: 'image' }],
   frame: [],
-  custom: [{ id: 'custom-out', label: 'Custom', kind: 'prompt' }],
 };
 
-export function editableFieldIdsFor(node: ImageXNode): string[] {
-  if (node.type !== 'custom') return editableFields[node.type];
-  return editableFieldDefinitionsFor(node)
-    .filter((field) => field.kind !== 'inputSocket')
-    .map((field) => field.id);
-}
-
 export function inputPortsFor(node: ImageXNode): NodePort[] {
-  if (node.type !== 'custom') return inputPorts[node.type];
-  return fieldDefinitionsFor(node)
-    .filter((field) => field.kind !== 'outputSocket')
-    .map((field) => fieldToInputPort(field));
+  const staticPorts = inputPorts[node.type];
+  
+  // For primitive nodes, generate input ports from text/textarea/image fields
+  const primitiveTypes: NodeType[] = ['prompt', 'image', 'color', 'file'];
+  if (!primitiveTypes.includes(node.type)) return staticPorts;
+
+  const builtIn = builtInFieldDefinitions[node.type] || [];
+  const dynamic = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
+  const allFields = [...builtIn, ...dynamic];
+
+  const fieldPorts: NodePort[] = allFields
+    .filter((f) => f.kind === 'text' || f.kind === 'textarea' || f.kind === 'image')
+    .map((f) => ({
+      id: fieldHandleId(f.id),
+      label: f.label,
+      kind: (f.kind === 'image' ? 'image' : 'text') as PortKind,
+      accepts: (f.kind === 'image' ? ['image', 'result'] : ['text']) as PortKind[],
+      field: f.id,
+    }));
+
+  return [...staticPorts, ...fieldPorts];
 }
 
 export function outputPortsFor(node: ImageXNode): NodePort[] {
-  if (node.type !== 'custom') return outputPorts[node.type];
-  const customOutputs = fieldDefinitionsFor(node)
-    .filter((field) => field.kind === 'outputSocket')
-    .map((field) => ({
-      id: `output:${field.id}`,
-      label: field.label,
-      kind: 'prompt' as const,
-    }));
-  return customOutputs.length ? customOutputs : outputPorts.custom;
-}
-
-function fieldToInputPort(field: CustomFieldDefinition): NodePort {
-  return {
-    id: fieldHandleId(field.id),
-    label: field.label,
-    kind: 'prompt',
-    ...(field.accepts ? { accepts: field.accepts as PortKind[] } : {}),
-    field: field.id,
-  };
+  return outputPorts[node.type];
 }
 
 type MinimalConnection = {
@@ -110,7 +79,7 @@ type MinimalConnection = {
   targetHandle?: string | null;
 };
 
-export function isCompatibleConnection(connection: MinimalConnection, nodes: ImageXNode[]): boolean {
+export function isCompatibleConnection(connection: MinimalConnection, nodes: ImageXNode[], edges?: { source: string; target: string }[]): boolean {
   if (!connection.source || !connection.target) return false;
   if (connection.source === connection.target) return false;
 
@@ -122,7 +91,33 @@ export function isCompatibleConnection(connection: MinimalConnection, nodes: Ima
   const targetPort = inputPortsFor(target).find((port) => port.id === connection.targetHandle);
   if (!sourcePort || !targetPort) return false;
 
-  return (targetPort.accepts || [targetPort.kind]).includes(sourcePort.kind);
+  if (!(targetPort.accepts || [targetPort.kind]).includes(sourcePort.kind)) return false;
+
+  // Cycle detection: would adding source→target create a cycle?
+  if (edges) {
+    if (wouldCreateCycle(connection.source, connection.target, edges)) return false;
+  }
+
+  return true;
+}
+
+/** Check if adding an edge from source→target would create a cycle */
+function wouldCreateCycle(source: string, target: string, edges: { source: string; target: string }[]): boolean {
+  // DFS from target following existing edges - if we can reach source, it's a cycle
+  const visited = new Set<string>();
+  const stack = [target];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current === source) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    for (const edge of edges) {
+      if (edge.source === current) {
+        stack.push(edge.target);
+      }
+    }
+  }
+  return false;
 }
 
 export function portLabel(node: ImageXNode | undefined, handleId: string | null | undefined): string {

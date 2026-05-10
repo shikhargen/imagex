@@ -39,6 +39,8 @@ export function FieldControl({
   assetPreviewUrl,
   assetDisplayName,
   onOpenAssets,
+  labelEditing,
+  onLabelCommit,
 }: {
   field: CustomFieldDefinition;
   value: unknown;
@@ -46,6 +48,8 @@ export function FieldControl({
   assetPreviewUrl?: string | undefined;
   assetDisplayName?: string | undefined;
   onOpenAssets?: (() => void) | undefined;
+  labelEditing?: boolean;
+  onLabelCommit?: (newLabel: string) => void;
 }) {
   const stringValue = value === undefined || value === null ? '' : String(value);
   const assetLabel = assetDisplayName?.trim() || stringValue;
@@ -54,6 +58,9 @@ export function FieldControl({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectionRef = useRef<{ start: number; end: number } | null>(null);
   const isLong = field.kind === 'textarea' || stringValue.length > 42;
+
+  // Helper to pass label editing props to all shells
+  const shellLabelProps = { labelEditing, onLabelCommit };
 
   useEffect(() => {
     setDraft(stringValue);
@@ -75,6 +82,55 @@ export function FieldControl({
     onChange(nextValue);
   }
 
+  if (field.kind === 'color') {
+    return (
+      <Field className="ix-field">
+        <span className="ix-control-shell">
+          <FieldLabel className="ix-control-label ix-control-label--inline">{field.label}</FieldLabel>
+          <span className="ix-color-picker-row">
+            <input
+              type="color"
+              className="nodrag ix-color-input"
+              value={stringValue || '#ffffff'}
+              onChange={(event) => onChange(event.target.value)}
+            />
+            <Input
+              ref={inputRef}
+              className="nodrag ix-color-text"
+              value={draft || '#ffffff'}
+              onChange={(event) => updateDraft(event.target.value)}
+            />
+          </span>
+        </span>
+      </Field>
+    );
+  }
+
+  if (field.kind === 'image') {
+    return (
+      <Field className="ix-field long">
+        <span className="ix-control-shell text-shell asset-shell">
+          <FieldLabel className="ix-control-label ix-control-label--floating">{field.label}</FieldLabel>
+          <div className="ix-asset-field">
+            {onOpenAssets && (
+              <Button type="button" variant="secondary" size="sm" className="nodrag ix-asset-picker-button" onClick={onOpenAssets}>
+                <span>{assetLabel || 'Choose image...'}</span>
+              </Button>
+            )}
+            {assetPreviewUrl && (
+              <figure className="ix-asset-preview">
+                <img src={assetPreviewUrl} alt="" />
+              </figure>
+            )}
+            {!onOpenAssets && !assetPreviewUrl && (
+              <Textarea ref={textareaRef} className="nodrag" value={draft} rows={2} placeholder="Image description..." onChange={(event) => updateDraft(event.target.value)} />
+            )}
+          </div>
+        </span>
+      </Field>
+    );
+  }
+
   if (field.kind === 'select') {
     return (
       <SelectField
@@ -91,23 +147,28 @@ export function FieldControl({
     const max = field.max ?? 1;
     const step = field.step ?? 0.05;
     return (
-      <NodeFieldShell label={field.label} className="ix-slider-row">
-          <Slider
-            className="nodrag ix-slider"
-            min={min}
-            max={max}
-            step={step}
-            value={[Number(value) || min]}
-            onValueChange={(nextValue) => onChange(nextValue[0] ?? min)}
-          />
-          <Input className="nodrag ix-slider-value" value={stringValue || String(min)} onChange={(event) => onChange(coerceNumber(event.target.value))} />
-      </NodeFieldShell>
+      <Field className="ix-field">
+        <span className="ix-control-shell ix-slider-shell">
+          <FieldLabel className="ix-control-label ix-control-label--inline">{field.label}</FieldLabel>
+          <div className="ix-slider-row">
+            <Slider
+              className="nodrag ix-slider"
+              min={min}
+              max={max}
+              step={step}
+              value={[Number(value) || min]}
+              onValueChange={(nextValue) => onChange(nextValue[0] ?? min)}
+            />
+            <span className="ix-slider-value">{stringValue || String(min)}</span>
+          </div>
+        </span>
+      </Field>
     );
   }
 
   if (field.kind === 'number') {
     return (
-      <NodeFieldShell label={field.label}>
+      <NodeFieldShell label={field.label} {...shellLabelProps}>
         <Input className="nodrag" type="number" value={stringValue} onChange={(event) => onChange(coerceNumber(event.target.value))} />
       </NodeFieldShell>
     );
@@ -115,7 +176,7 @@ export function FieldControl({
 
   if (field.kind === 'toggle') {
     return (
-      <NodeFieldShell label={field.label}>
+      <NodeFieldShell label={field.label} {...shellLabelProps}>
           <Switch className="nodrag ix-switch" checked={Boolean(value)} onCheckedChange={onChange} />
       </NodeFieldShell>
     );
@@ -123,7 +184,7 @@ export function FieldControl({
 
   if (onOpenAssets) {
     return (
-      <NodeFieldShell label={field.label} long className="asset-shell">
+      <NodeFieldShell label={field.label} long className="asset-shell" {...shellLabelProps}>
         <div className="ix-asset-field">
           <Button type="button" variant="secondary" size="sm" className="nodrag ix-asset-picker-button" onClick={onOpenAssets}>
             <span>{assetLabel || draft || 'Choose asset...'}</span>
@@ -140,14 +201,14 @@ export function FieldControl({
 
   if (isLong) {
     return (
-      <NodeFieldShell label={field.label} long>
+      <NodeFieldShell label={field.label} long {...shellLabelProps}>
           <Textarea ref={textareaRef} className="nodrag" value={draft} rows={field.id === 'text' ? 5 : 3} onChange={(event) => updateDraft(event.target.value)} />
       </NodeFieldShell>
     );
   }
 
   return (
-    <NodeFieldShell label={field.label}>
+    <NodeFieldShell label={field.label} {...shellLabelProps}>
       <Input ref={inputRef} className="nodrag" value={draft} onChange={(event) => updateDraft(event.target.value)} />
     </NodeFieldShell>
   );
@@ -158,19 +219,81 @@ function NodeFieldShell({
   children,
   long,
   className,
+  labelEditing,
+  onLabelCommit,
 }: {
   label: string;
   children: ReactNode;
-  long?: boolean;
-  className?: string;
+  long?: boolean | undefined;
+  className?: string | undefined;
+  labelEditing?: boolean | undefined;
+  onLabelCommit?: ((newLabel: string) => void) | undefined;
 }) {
   return (
     <Field className={`ix-field ${long ? 'long' : ''}`}>
       <span className={`ix-control-shell ${long ? 'text-shell' : ''} ${className || ''}`}>
-        <FieldLabel className={`ix-control-label ${long ? 'ix-control-label--floating' : 'ix-control-label--inline'}`}>{label}</FieldLabel>
+        {labelEditing ? (
+          <EditableLabelInline
+            value={label}
+            className={`ix-control-label ${long ? 'ix-control-label--floating' : 'ix-control-label--inline'}`}
+            onCommit={(v) => onLabelCommit?.(v)}
+          />
+        ) : (
+          <FieldLabel className={`ix-control-label ${long ? 'ix-control-label--floating' : 'ix-control-label--inline'}`}>{label}</FieldLabel>
+        )}
         {children}
       </span>
     </Field>
+  );
+}
+
+function EditableLabelInline({
+  value,
+  className,
+  onCommit,
+}: {
+  value: string;
+  className: string;
+  onCommit: (value: string) => void;
+}) {
+  const [editing, setEditing] = useState(true);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      const len = inputRef.current.value.length;
+      inputRef.current.setSelectionRange(len, len);
+    }
+  }, [editing]);
+
+  const save = () => {
+    const text = draft.trim() || value;
+    onCommit(text);
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return <FieldLabel className={className}>{draft || value}</FieldLabel>;
+  }
+
+  // Render a <label> wrapper with the same class so layout is identical,
+  // and put a naked input inside it
+  return (
+    <label className={className}>
+      <input
+        ref={inputRef}
+        className="ix-label-edit nodrag"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
+        }}
+        onBlur={save}
+      />
+    </label>
   );
 }
 
@@ -192,7 +315,7 @@ function SelectField({
         <SelectTrigger className="nodrag ix-select-trigger" size="sm">
           <SelectValue placeholder="Select..." />
         </SelectTrigger>
-        <SelectContent className="nodrag">
+        <SelectContent className="nodrag" position="popper" sideOffset={4}>
           {options.map((option) => (
             <SelectItem key={option} value={option}>
               {option}

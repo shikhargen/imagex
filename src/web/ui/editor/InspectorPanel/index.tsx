@@ -49,7 +49,7 @@ export function InspectorPanel({
       <section className="inspector-output">
         <h2>Latest Output</h2>
         {(() => {
-          const result = node && node.type === 'output' ? outputResults.get(node.id) : undefined;
+          const result = node && node.type === 'codex-output' ? outputResults.get(node.id) : undefined;
           const image = result?.images[0];
           if (image) {
             return (

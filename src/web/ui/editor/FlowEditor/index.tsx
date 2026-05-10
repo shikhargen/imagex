@@ -22,25 +22,25 @@ import { nodeMeta } from '../../flow/meta.js';
 import { isCompatibleConnection, portLabel } from '../../flow/ports.js';
 import type { UiEdge, UiNode } from '../../flow/types.js';
 import {
-  CharacterNode,
-  CustomNode,
+  CodexOutputNode,
+  ColorBalanceNode,
+  ColorNode,
+  FileNode,
   FrameNode,
-  ImageInputNode,
-  OutputNode,
-  SceneNode,
-  StyleNode,
-  TextNode,
+  ImageNode,
+  PromptNode,
+  RotateFlipNode,
 } from '../../flow/nodes/ImageXNode.js';
 
 const nodeTypes = {
-  text: TextNode,
-  character: CharacterNode,
-  style: StyleNode,
-  scene: SceneNode,
-  imageInput: ImageInputNode,
-  output: OutputNode,
+  prompt: PromptNode,
+  image: ImageNode,
+  color: ColorNode,
+  file: FileNode,
+  'codex-output': CodexOutputNode,
+  'color-balance': ColorBalanceNode,
+  'rotate-flip': RotateFlipNode,
   frame: FrameNode,
-  custom: CustomNode,
 };
 
 export function FlowEditor({
@@ -104,7 +104,7 @@ export function FlowEditor({
   );
   const handleConnect = useCallback(
     (connection: Connection) => {
-      if (!isCompatibleConnection(connection, nodes.map((node) => node.data.workflowNode))) return;
+      if (!isCompatibleConnection(connection, nodes.map((node) => node.data.workflowNode), edges)) return;
       onBeforeChange();
       const source = nodes.find((node) => node.id === connection.source);
       const target = nodes.find((node) => node.id === connection.target);
@@ -116,7 +116,7 @@ export function FlowEditor({
   const handleReconnect = useCallback(
     (oldEdge: UiEdge, newConnection: Connection) => {
       if (!newConnection.target || !newConnection.targetHandle) return;
-      if (!isCompatibleConnection(newConnection, nodes.map((node) => node.data.workflowNode))) return;
+      if (!isCompatibleConnection(newConnection, nodes.map((node) => node.data.workflowNode), edges)) return;
       onBeforeChange();
       edgeReconnectSuccessful.current = true;
       const source = nodes.find((node) => node.id === newConnection.source);
@@ -217,7 +217,7 @@ export function FlowEditor({
         }}
         edgesReconnectable
         reconnectRadius={16}
-        isValidConnection={(connection) => isCompatibleConnection(connection, nodes.map((node) => node.data.workflowNode))}
+        isValidConnection={(connection) => isCompatibleConnection(connection, nodes.map((node) => node.data.workflowNode), edges)}
         onNodeClick={(_, node) => {
           if (placingNodeId) {
             onPlacingDrop?.();

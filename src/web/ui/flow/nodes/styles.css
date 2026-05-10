@@ -9,7 +9,6 @@
   min-width: 20rem;
   max-width: 42rem;
   border: 1px solid var(--ui-border-subtle);
-  border-top: 2px solid var(--node-accent);
   border-radius: 12px;
   background: var(--ui-bg-surface);
   color: var(--ui-text-primary);
@@ -19,29 +18,29 @@
     box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.ix-node-text {
+.ix-node-prompt {
   --node-accent: #6ee7b7;
 }
-.ix-node-character {
-  --node-accent: #a78bfa;
-}
-.ix-node-style {
-  --node-accent: #f472b6;
-}
-.ix-node-scene {
-  --node-accent: #f59e0b;
-}
-.ix-node-imageInput {
+.ix-node-image {
   --node-accent: #60a5fa;
 }
-.ix-node-output {
+.ix-node-color {
+  --node-accent: #f472b6;
+}
+.ix-node-file {
+  --node-accent: #f59e0b;
+}
+.ix-node-codex-output {
   --node-accent: #22d3ee;
+}
+.ix-node-color-balance {
+  --node-accent: #a78bfa;
+}
+.ix-node-rotate-flip {
+  --node-accent: #fb923c;
 }
 .ix-node-frame {
   --node-accent: #6b7280;
-}
-.ix-node-custom {
-  --node-accent: #a3a3a3;
 }
 
 /* Override React Flow built-in output node border */
@@ -63,7 +62,6 @@
   min-height: 100%;
   background: rgba(20, 20, 20, 0.4);
   border: 1px dashed var(--ui-border-default);
-  border-top: 2px solid var(--node-accent);
   border-radius: 12px;
   box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.02);
   max-width: none;
@@ -165,13 +163,14 @@
 .ix-node-ports {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.444rem;
-  padding: 0.333rem 0 0.111rem;
+  gap: 0.25rem;
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .ix-port-column {
   display: grid;
-  gap: 0.167rem;
+  gap: 0.125rem;
   align-content: start;
 }
 
@@ -183,25 +182,35 @@
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 1rem;
+  min-height: 1.5rem;
   color: var(--ui-text-muted);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
+  font-weight: 500;
   line-height: 1;
-  transition: color 0.12s ease;
+  transition: color 0.15s;
+  padding: 0.188rem 0;
 }
 
 .ix-port-row:hover {
-  color: var(--ui-text-secondary);
+  color: var(--ui-text-primary);
 }
 
 .ix-port-row.input {
   justify-content: flex-start;
-  padding-left: 1.222rem;
+  padding-left: 0.875rem;
+}
+
+.ix-port-row.input .ix-handle-in {
+  left: -0.556rem;
 }
 
 .ix-port-row.output {
   justify-content: flex-end;
-  padding-right: 1.222rem;
+  padding-right: 0.875rem;
+}
+
+.ix-port-row.output .ix-handle-out {
+  right: -0.556rem;
 }
 
 /* Handles */
@@ -238,7 +247,7 @@
 .ix-node-fields {
   display: grid;
   gap: 0.333rem;
-  padding: 0.444rem 0.556rem 0.667rem;
+  padding: 0.444rem 0.625rem 0.625rem;
   min-width: 0;
 }
 .ix-node-fields > * {
@@ -307,11 +316,13 @@
 .ix-control-shell.text-shell {
   display: block;
   width: 100%;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .ix-control-shell.asset-shell {
   display: block;
   width: 100%;
+  background: var(--ui-bg-panel);
 }
 
 /* Label inside control shell */
@@ -360,9 +371,15 @@
   width: 100%;
   color: var(--ui-text-primary);
   font: inherit;
-  background: transparent;
-  border: none;
-  outline: none;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  ring: none !important;
+}
+
+.ix-field.long [data-slot='textarea'] {
+  color: #f0f0f0;
 }
 
 .ix-field [data-slot='input'],
@@ -385,7 +402,18 @@
 
 .ix-field [data-slot='input']:focus,
 .ix-field [data-slot='textarea']:focus {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.ix-field [data-slot='input']:focus-visible,
+.ix-field [data-slot='textarea']:focus-visible {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  ring: none !important;
 }
 
 /* Select trigger override for dark theme */
@@ -414,57 +442,100 @@
   background: var(--ui-bg-surface) !important;
   border: 1px solid var(--ui-border-strong) !important;
   border-radius: var(--ui-radius-lg) !important;
-  box-shadow: var(--ui-shadow-md) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+  min-width: var(--radix-select-trigger-width) !important;
+  padding: 0.25rem !important;
 }
 
 [data-slot='select-item'] {
   color: var(--ui-text-secondary) !important;
-  font-size: 0.8125rem !important;
-  padding: var(--ui-space-2) var(--ui-space-3) !important;
+  font-size: 0.75rem !important;
+  padding: 0.375rem 0.5rem !important;
+  border-radius: var(--ui-radius-sm) !important;
+  cursor: pointer;
 }
 
 [data-slot='select-item']:hover,
 [data-slot='select-item'][data-highlighted] {
-  background: rgba(255, 255, 255, 0.06) !important;
+  background: var(--ui-bg-hover) !important;
+  color: var(--ui-text-primary) !important;
 }
 
 /* Slider */
 .ix-slider-row {
-  display: grid;
-  grid-template-columns: minmax(min-content, var(--field-label-width)) 1fr 3rem;
-  gap: 0.333rem;
+  display: flex !important;
   align-items: center;
-  padding-right: 0.222rem;
-  min-height: 1.75rem;
+  gap: 0.5rem;
+  padding: 1.75rem 0.625rem 0.5rem;
+  width: 100%;
 }
 
 .ix-slider {
-  padding: 0 0.25rem;
+  flex: 1;
+}
+
+.ix-slider-label {
+  color: var(--ui-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+.ix-slider-label {
+  color: var(--ui-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+.ix-slider {
+  padding: 0 0.125rem;
 }
 
 .ix-slider [data-slot='slider-track'] {
-  background: var(--ui-border-default) !important;
-  height: 0.167rem !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  height: 4px !important;
+  border-radius: 2px !important;
 }
 
 .ix-slider [data-slot='slider-range'] {
-  background: var(--node-accent) !important;
+  background: rgba(255, 255, 255, 0.35) !important;
+  border-radius: 2px !important;
 }
 
 .ix-slider [data-slot='slider-thumb'] {
-  width: 0.667rem !important;
-  height: 0.667rem !important;
-  background: var(--ui-text-primary) !important;
-  border: 2px solid var(--node-accent) !important;
-  box-shadow: 0 0.056rem 0.167rem rgba(0, 0, 0, 0.3) !important;
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+  background: var(--ui-text-dim) !important;
+  border: none !important;
+  border-radius: 50% !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+  transition: transform 0.15s, background 0.15s !important;
+  cursor: grab !important;
+}
+
+.ix-slider [data-slot='slider-thumb']:hover {
+  background: var(--ui-text-secondary) !important;
+  transform: scale(1.1) !important;
+}
+
+.ix-slider [data-slot='slider-thumb']:active {
+  cursor: grabbing !important;
 }
 
 .ix-slider-value {
-  min-width: 0;
-  text-align: right;
-  color: var(--ui-text-muted);
-  font-size: 0.75rem;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.25rem 0.375rem;
+  text-align: center;
+  color: var(--ui-text-secondary);
+  font-size: 0.625rem;
   font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, monospace;
+  border: 1px solid var(--ui-border-default);
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
 }
 
 /* Switch */
@@ -684,4 +755,152 @@
 .preview-prompt-button:hover {
   border-color: var(--node-accent);
   color: var(--ui-text-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  New Node Styles                                                           */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Rename input */
+.ix-node-rename-input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--node-accent);
+  background: transparent;
+  color: var(--ui-text-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0 0 2px;
+  outline: none;
+}
+
+/* Primitive field row (with hover actions) */
+.ix-primitive-field {
+  position: relative;
+  padding: 0.25rem 0;
+}
+
+.ix-primitive-field > .ix-handle-in {
+  left: -0.556rem;
+}
+
+.ix-field-actions {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.375rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ix-primitive-field:hover .ix-field-actions {
+  opacity: 1;
+}
+
+.ix-field-actions button {
+  display: grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ui-text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ix-field-actions button:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--ui-text-primary);
+}
+
+.ix-field-actions button.danger:hover {
+  background: var(--ui-color-danger-bg);
+  color: var(--ui-color-danger);
+}
+
+.ix-field-label-input {
+  width: calc(100% - 1rem);
+  margin: 0 0.5rem;
+  border: none;
+  border-bottom: 1px solid var(--node-accent);
+  background: transparent;
+  color: var(--ui-text-primary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0;
+  outline: none;
+}
+
+/* Label edit input - sits inside a <label> wrapper with the same class */
+.ix-label-edit {
+  all: unset;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  caret-color: var(--node-accent);
+}
+
+/* Add field button */
+.ix-add-field {
+  padding: 0.25rem 0.625rem 0.625rem;
+}
+
+.ix-add-field-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.333rem;
+  padding: 0.333rem 0.5rem;
+  border: none;
+  border-radius: var(--ui-radius-md);
+  background: transparent;
+  color: var(--ui-text-dim);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ix-add-field-btn:hover {
+  color: var(--ui-text-secondary);
+  background: var(--ui-bg-hover);
+}
+
+/* Color picker */
+.ix-color-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.5rem;
+  height: 1.75rem;
+}
+
+.ix-color-input {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--ui-border-default);
+  border-radius: var(--ui-radius-sm);
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+}
+
+.ix-color-input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.ix-color-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+.ix-color-text {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.75rem !important;
+  letter-spacing: 0.02em;
 }

@@ -6,23 +6,37 @@ type CompiledWorkflow = {
 };
 
 export function compileWorkflow(workflow: ImageXWorkflow): CompiledWorkflow {
-  const output = workflow.nodes.find((node) => node.type === 'output');
+  const outputs = workflow.nodes.filter((node) => node.type === 'codex-output');
   const context = graphContext(workflow);
-  const { promptJson, references } = buildPromptAndReferences(workflow, context);
+
+  const compiledOutputs = outputs.map((output) => compileCodexOutput(output, context)).filter(isMeaningfulObject);
+
+  const rawPrompt = {
+    useCase: workflow.settings.useCase || 'stylized-concept',
+    assetType: 'imagex generated workflow output',
+    instruction:
+      'Generate one image from this structured workflow. Treat node fields as reusable creative components. Preserve explicit user values and do not invent unrelated logos, watermarks, or extra text.',
+    outputs: compiledOutputs,
+  };
+
+  const references: ImageReference[] = [];
+  const nextIndex = { value: 1 };
+  const promptJson = assignImagePositions(rawPrompt, nextIndex, references);
   const prompt = JSON.stringify(promptJson, null, 2);
 
+  const primaryOutput = outputs[0];
   return {
     prompt,
-    options: buildOptions(prompt, output, workflow.name, references),
+    options: buildOptions(prompt, primaryOutput, workflow.name, references),
   };
 }
 
 export function compileOutputNodeWorkflow(workflow: ImageXWorkflow, nodeId: string): CompiledWorkflow | null {
   const context = graphContext(workflow);
   const output = context.nodesById.get(nodeId);
-  if (!output || output.type !== 'output') return null;
+  if (!output || output.type !== 'codex-output') return null;
 
-  const compiled = compileOutputNode(output, context, new Set());
+  const compiled = compileCodexOutput(output, context);
   if (!isMeaningfulObject(compiled)) return null;
 
   const rawPrompt = {
@@ -35,8 +49,7 @@ export function compileOutputNodeWorkflow(workflow: ImageXWorkflow, nodeId: stri
 
   const references: ImageReference[] = [];
   const nextIndex = { value: 1 };
-  const seenPaths = new Map<string, string>();
-  const promptJson = assignImagePositions(rawPrompt, nextIndex, references, seenPaths);
+  const promptJson = assignImagePositions(rawPrompt, nextIndex, references);
   const prompt = JSON.stringify(promptJson, null, 2);
 
   return {
@@ -44,6 +57,245 @@ export function compileOutputNodeWorkflow(workflow: ImageXWorkflow, nodeId: stri
     options: buildOptions(prompt, output, workflow.name, references),
   };
 }
+
+// ─── Graph Traversal ─────────────────────────────────────────────────────────
+
+type GraphContext = {
+  nodesById: Map<string, ImageXNode>;
+  /** Maps "targetId:targetHandle" → list of source nodes connected to that input */
+  incomingByTargetHandle: Map<string, ImageXNode[]>;
+};
+
+function graphContext(workflow: ImageXWorkflow): GraphContext {
+  const nodesById = new Map(workflow.nodes.map((node) => [node.id, node]));
+  const incomingByTargetHandle = new Map<string, ImageXNode[]>();
+  for (const edge of workflow.edges) {
+    if (!edge.targetHandle) continue;
+    const source = nodesById.get(edge.source);
+    if (!source) continue;
+    const key = `${edge.target}:${edge.targetHandle}`;
+    const existing = incomingByTargetHandle.get(key) || [];
+    existing.push(source);
+    incomingByTargetHandle.set(key, existing);
+  }
+  return { nodesById, incomingByTargetHandle };
+}
+
+/** Get upstream nodes connected to a specific handle on a node */
+function getUpstreamForHandle(nodeId: string, handleId: string, context: GraphContext): ImageXNode[] {
+  return context.incomingByTargetHandle.get(`${nodeId}:${handleId}`) || [];
+}
+
+/** Get ALL upstream nodes connected to any handle on a node */
+function getAllUpstream(nodeId: string, context: GraphContext): ImageXNode[] {
+  const upstream: ImageXNode[] = [];
+  for (const [key, sources] of context.incomingByTargetHandle.entries()) {
+    if (!key.startsWith(`${nodeId}:`)) continue;
+    upstream.push(...sources);
+  }
+  return upstream;
+}
+
+// ─── Node Compilation (DFS bottom-up) ───────────────────────────────────────
+
+/**
+ * Compiles a node into a JSON object representing its semantics.
+ * 
+ * Each node becomes an object of { label: value } pairs from its fields.
+ * If a field has upstream connections (via its socket), the value becomes
+ * the compiled object(s) of those upstream nodes instead of the field's text value.
+ * 
+ * For image fields: value is "__imagex_image_ref" marker that gets post-processed
+ * into [image-N] position references.
+ */
+function compileNode(node: ImageXNode, context: GraphContext, seen: Set<string>): unknown {
+  if (seen.has(node.id)) return null;
+  const nextSeen = new Set(seen);
+  nextSeen.add(node.id);
+
+  switch (node.type) {
+    case 'prompt':
+    case 'file':
+      return compilePrimitiveNode(node, context, nextSeen);
+    case 'image':
+      return compileImageNode(node, context, nextSeen);
+    case 'color':
+      return compileColorNode(node);
+    case 'color-balance':
+    case 'rotate-flip':
+    case 'frame':
+      return null;
+    case 'codex-output':
+      // When an output node's result is connected downstream, it acts as an image reference
+      return { image: { __imagex_ref: true, path: `__output:${node.id}` } };
+  }
+}
+
+function compilePrimitiveNode(node: ImageXNode, context: GraphContext, seen: Set<string>): unknown {
+  const title = typeof node.data.title === 'string' && node.data.title !== nodeMeta(node.type)
+    ? node.data.title
+    : undefined;
+
+  // Get all fields (built-in + dynamic)
+  const builtInFields = getBuiltInFields(node);
+  const dynamicFields = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
+  const allFields = [...builtInFields, ...dynamicFields];
+
+  const result: Record<string, unknown> = {};
+  if (title) result._name = title;
+
+  for (const field of allFields) {
+    const handleId = `field:${field.id}`;
+    const upstream = getUpstreamForHandle(node.id, handleId, context);
+
+    if (upstream.length > 0) {
+      // This field has connections flowing in - compile those nodes
+      const compiled = upstream.map((up) => compileNode(up, context, new Set(seen))).filter(Boolean);
+      if (compiled.length === 1) {
+        result[field.label] = compiled[0];
+      } else if (compiled.length > 1) {
+        result[field.label] = compiled;
+      }
+    } else {
+      // Use the field's own value
+      const value = getFieldValue(node, field);
+      if (value !== undefined && value !== null && value !== '') {
+        result[field.label] = value;
+      }
+    }
+  }
+
+  // If only one field and no name, just return the value directly
+  const keys = Object.keys(result).filter((k) => k !== '_name');
+  if (keys.length === 1 && !title) {
+    return result[keys[0]!];
+  }
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function compileImageNode(node: ImageXNode, context: GraphContext, seen: Set<string>): unknown {
+  const title = typeof node.data.title === 'string' && node.data.title !== 'Image'
+    ? node.data.title
+    : undefined;
+  const assetName = typeof node.data.assetName === 'string' ? node.data.assetName : '';
+  const assetUrl = typeof node.data.assetUrl === 'string' ? node.data.assetUrl : '';
+  const path = assetUrl || assetName;
+  const description = getFieldValue(node, { id: 'description', kind: 'textarea' }) as string || '';
+
+  const builtInFields = getBuiltInFields(node);
+  const dynamicFields = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
+  const allFields = [...builtInFields, ...dynamicFields];
+
+  const result: Record<string, unknown> = {};
+  if (title) result._name = title;
+  if (description) result.description = description;
+
+  // Collect images: if upstream is connected to image socket, use those only.
+  // Otherwise use this node's own image.
+  const imageHandleId = `field:image`;
+  const imageUpstream = getUpstreamForHandle(node.id, imageHandleId, context);
+  const imageEntries: unknown[] = [];
+
+  if (imageUpstream.length > 0) {
+    // Upstream images flowing in - don't include this node's own image
+    for (const up of imageUpstream) {
+      const compiled = compileNode(up, context, new Set(seen));
+      if (compiled) imageEntries.push(compiled);
+    }
+  } else if (path) {
+    // No upstream - use this node's own image
+    imageEntries.push({ __imagex_ref: true, path });
+  }
+
+  if (imageEntries.length === 1) {
+    result.image = imageEntries[0];
+  } else if (imageEntries.length > 1) {
+    result.image = imageEntries;
+  }
+
+  // Process remaining fields (not the image field)
+  for (const field of allFields) {
+    if (field.id === 'image' || field.id === 'description') continue;
+    const handleId = `field:${field.id}`;
+    const upstream = getUpstreamForHandle(node.id, handleId, context);
+
+    if (upstream.length > 0) {
+      const compiled = upstream.map((up) => compileNode(up, context, new Set(seen))).filter(Boolean);
+      if (compiled.length === 1) {
+        result[field.label] = compiled[0];
+      } else if (compiled.length > 1) {
+        result[field.label] = compiled;
+      }
+    } else {
+      const value = getFieldValue(node, field);
+      if (value !== undefined && value !== null && value !== '') {
+        result[field.label] = value;
+      }
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function compileColorNode(node: ImageXNode): unknown {
+  const color = getFieldValue(node, { id: 'color', kind: 'color' }) || '#ffffff';
+  return { color };
+}
+
+// ─── Codex Output Compilation ────────────────────────────────────────────────
+
+function compileCodexOutput(output: ImageXNode, context: GraphContext): Record<string, unknown> {
+  const baseSeen = new Set<string>([output.id]);
+  const upstream = getAllUpstream(output.id, context);
+
+  const inputs: unknown[] = [];
+  for (const node of upstream) {
+    const compiled = compileNode(node, context, new Set(baseSeen));
+    if (compiled) inputs.push(compiled);
+  }
+
+  return {
+    request: inputs.length === 1 ? inputs[0] : inputs,
+    settings: {
+      size: output.data['size'] ?? '1024x1024',
+      quality: output.data['quality'] ?? 'auto',
+      format: output.data['format'] ?? 'png',
+      background: output.data['background'] ?? 'auto',
+      count: output.data['count'] ?? 1,
+    },
+  };
+}
+
+// ─── Image Position Assignment ───────────────────────────────────────────────
+
+function assignImagePositions(value: unknown, nextIndex: { value: number }, refs: ImageReference[]): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => assignImagePositions(item, nextIndex, refs));
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if ('__imagex_ref' in record) {
+      const path = String(record.path || '');
+      const position = `[image-${nextIndex.value++}]`;
+      refs.push({
+        name: path,
+        role: 'reference',
+        notes: '',
+        position,
+      });
+      return position;
+    }
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(record)) {
+      result[key] = assignImagePositions(val, nextIndex, refs);
+    }
+    return result;
+  }
+  return value;
+}
+
+// ─── Options Builder ─────────────────────────────────────────────────────────
 
 function buildOptions(prompt: string, output: ImageXNode | undefined, workflowName: string, references: ImageReference[]): ImageGenerationOptions {
   return {
@@ -64,219 +316,42 @@ function buildOptions(prompt: string, output: ImageXNode | undefined, workflowNa
   };
 }
 
-function buildPromptAndReferences(workflow: ImageXWorkflow, context: GraphContext): { promptJson: unknown; references: ImageReference[] } {
-  const outputs = workflow.nodes.filter((node) => node.type === 'output');
-  const compiledOutputs = outputs.map((output) => compileOutputNode(output, context, new Set())).filter(isMeaningfulObject);
-  const fallback = outputs.length === 0 ? fallbackInputs(workflow, context) : null;
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  const rawPrompt = {
-    useCase: workflow.settings.useCase || 'stylized-concept',
-    assetType: 'imagex generated workflow output',
-    instruction:
-      'Generate one image from this structured workflow. Treat node fields as reusable creative components. Preserve explicit user values and do not invent unrelated logos, watermarks, or extra text.',
-    outputs: compiledOutputs,
-    ...(fallback
-      ? {
-          primaryRequest: fallback.primaryRequest,
-          characters: fallback.characters,
-          styles: fallback.styles,
-          scenes: fallback.scenes,
-          imageInputs: fallback.imageInputs,
-        }
-      : {}),
-  };
-
-  const references: ImageReference[] = [];
-  const nextIndex = { value: 1 };
-  const seenPaths = new Map<string, string>();
-  const promptJson = assignImagePositions(rawPrompt, nextIndex, references, seenPaths);
-
-  return { promptJson, references };
-}
-
-function assignImagePositions(value: unknown, nextIndex: { value: number }, refs: ImageReference[], seenPaths: Map<string, string>): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => assignImagePositions(item, nextIndex, refs, seenPaths));
-  }
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    if ('__imagex_image' in record) {
-      const { __imagex_image: _marker, path, role, notes, ...rest } = record;
-      const pathKey = String(path || '');
-      const existingPosition = seenPaths.get(pathKey);
-      if (existingPosition) {
-        return { type: 'image', position: existingPosition, role: String(role || 'reference'), notes: String(notes || ''), ...rest };
-      }
-      const position = `[image-${nextIndex.value++}]`;
-      seenPaths.set(pathKey, position);
-      refs.push({
-        name: pathKey,
-        role: String(role || 'reference'),
-        notes: String(notes || ''),
-        position,
-      });
-      return { type: 'image', position, role: String(role || 'reference'), notes: String(notes || ''), ...rest };
-    }
-    const result: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(record)) {
-      result[key] = assignImagePositions(val, nextIndex, refs, seenPaths);
-    }
-    return result;
-  }
-  return value;
-}
-
-type GraphContext = {
-  nodesById: Map<string, ImageXNode>;
-  incomingByTargetHandle: Map<string, ImageXNode[]>;
+const defaultLabels: Record<string, string> = {
+  prompt: 'Prompt',
+  image: 'Image',
+  color: 'Color',
+  file: 'File',
 };
 
-type PromptSections = {
-  primaryRequest: unknown[];
-  characters: unknown[];
-  styles: unknown[];
-  scenes: unknown[];
-  imageInputs: unknown[];
-};
-
-function graphContext(workflow: ImageXWorkflow): GraphContext {
-  const nodesById = new Map(workflow.nodes.map((node) => [node.id, node]));
-  const incomingByTargetHandle = new Map<string, ImageXNode[]>();
-  for (const edge of workflow.edges) {
-    if (!edge.targetHandle) continue;
-    const source = nodesById.get(edge.source);
-    if (!source) continue;
-    const key = `${edge.target}:${edge.targetHandle}`;
-    const existing = incomingByTargetHandle.get(key) || [];
-    existing.push(source);
-    incomingByTargetHandle.set(key, existing);
-  }
-
-  return { nodesById, incomingByTargetHandle };
+function nodeMeta(type: string): string {
+  return defaultLabels[type] || type;
 }
 
-function compileOutputNode(output: ImageXNode, context: GraphContext, seen: Set<string>): Record<string, unknown> | string {
-  if (seen.has(output.id)) return '[circular reference]';
-  const nextSeen = new Set(seen);
-  nextSeen.add(output.id);
-
-  return {
-    request: compileOutputInputs(output, context, nextSeen),
-    settings: compileNodeFields(output, ['size', 'quality', 'format', 'background', 'count'], context, nextSeen),
+function getBuiltInFields(node: ImageXNode): CustomFieldDefinition[] {
+  // Import would be circular, so inline the lookup
+  const defs: Record<string, CustomFieldDefinition[]> = {
+    prompt: [{ id: 'text', label: 'Text', kind: 'textarea', value: '' }],
+    image: [
+      { id: 'image', label: 'Image', kind: 'image', value: '' },
+      { id: 'description', label: 'Description', kind: 'textarea', value: '' },
+    ],
+    color: [{ id: 'color', label: 'Color', kind: 'color', value: '#ffffff' }],
+    file: [{ id: 'filename', label: 'File', kind: 'text', value: '' }],
   };
+  return defs[node.type] || [];
 }
 
-function compileOutputInputs(output: ImageXNode, context: GraphContext, seen: Set<string>): PromptSections {
-  return {
-    primaryRequest: compileHandleInputs(output.id, 'prompt-in', context, seen),
-    characters: compileHandleInputs(output.id, 'character-in', context, seen),
-    styles: compileHandleInputs(output.id, 'style-in', context, seen),
-    scenes: compileHandleInputs(output.id, 'scene-in', context, seen),
-    imageInputs: compileHandleInputs(output.id, 'image-in', context, seen).filter((item) => !isOutputMarker(item)),
-  };
-}
-
-function compileHandleInputs(targetId: string, targetHandle: string, context: GraphContext, seen: Set<string>): unknown[] {
-  return (context.incomingByTargetHandle.get(`${targetId}:${targetHandle}`) || [])
-    .map((node) => compileConnectedNode(node, context, seen))
-    .filter(isMeaningfulObject);
-}
-
-function fallbackInputs(workflow: ImageXWorkflow, context: GraphContext): PromptSections {
-  return {
-    primaryRequest: compileNodesByType(workflow.nodes, 'text', context),
-    characters: compileNodesByType(workflow.nodes, 'character', context),
-    styles: compileNodesByType(workflow.nodes, 'style', context),
-    scenes: compileNodesByType(workflow.nodes, 'scene', context),
-    imageInputs: compileNodesByType(workflow.nodes, 'imageInput', context),
-  };
-}
-
-function compileNodesByType(nodes: ImageXNode[], type: ImageXNode['type'], context: GraphContext): unknown[] {
-  return nodes
-    .filter((node) => node.type === type)
-    .map((node) => compileConnectedNode(node, context, new Set()))
-    .filter(isMeaningfulObject);
-}
-
-function compileNodeFields(node: ImageXNode, keys: string[], context: GraphContext, seen = new Set<string>()): Record<string, unknown> {
-  const fields: Record<string, unknown> = {};
-  for (const key of keys) {
-    const connected = context.incomingByTargetHandle.get(`${node.id}:field:${key}`) || [];
-    if (connected.length === 1) {
-      fields[key] = compileConnectedNode(connected[0]!, context, seen);
-      continue;
-    }
-    if (connected.length > 1) {
-      fields[key] = connected.map((connectedNode) => compileConnectedNode(connectedNode, context, seen));
-      continue;
-    }
-
-    const value = node.data[key];
-    if (value === undefined || value === null || value === '') continue;
-    fields[key] = value;
-  }
-  return fields;
-}
-
-function compileConnectedNode(node: ImageXNode, context: GraphContext, seen: Set<string>): unknown {
-  if (seen.has(node.id)) return '[circular reference]';
-  const nextSeen = new Set(seen);
-  nextSeen.add(node.id);
-
-  switch (node.type) {
-    case 'text':
-      return compileNodeFields(node, ['text'], context, nextSeen);
-    case 'character':
-      return compileNodeFields(node, ['name', 'description', 'traits', 'clothing', 'mood', 'notes'], context, nextSeen);
-    case 'style':
-      return compileNodeFields(node, ['name', 'medium', 'palette', 'description', 'visualConstraints', 'strength'], context, nextSeen);
-    case 'scene':
-      return compileNodeFields(node, ['name', 'environment', 'mood', 'lighting', 'camera', 'weather', 'props', 'constraints'], context, nextSeen);
-    case 'imageInput': {
-      const fields = compileNodeFields(node, ['path', 'role', 'notes'], context, nextSeen);
-      return { __imagex_image: true, ...fields };
-    }
-    case 'output':
-      return { __imagex_output: true, id: node.id };
-    case 'frame':
-      return compileNodeFields(node, ['title', 'notes'], context, nextSeen);
-    case 'custom':
-      return compileCustomNode(node, context, nextSeen);
-  }
-}
-
-function compileCustomNode(node: ImageXNode, context: GraphContext, seen: Set<string>): Record<string, unknown> {
+function getFieldValue(node: ImageXNode, field: { id: string; kind: string }): unknown {
+  // Check node.data first
+  const directValue = node.data[field.id];
+  if (directValue !== undefined && directValue !== null && directValue !== '') return directValue;
+  // Check dynamic fields
   const fields = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
-  const compiled: Record<string, unknown> = {};
-  for (const field of fields) {
-    if (field.kind === 'outputSocket') continue;
-    const connected = context.incomingByTargetHandle.get(`${node.id}:field:${field.id}`) || [];
-    if (connected.length === 1) {
-      compiled[field.label] = compileConnectedNode(connected[0]!, context, seen);
-      continue;
-    }
-    if (connected.length > 1) {
-      compiled[field.label] = connected.map((connectedNode) => compileConnectedNode(connectedNode, context, seen));
-      continue;
-    }
-    if (field.kind === 'inputSocket') continue;
-    if (field.value === undefined || field.value === null || field.value === '') continue;
-    compiled[field.label] = field.value;
-  }
-  return compiled;
-}
-
-function isOutputMarker(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
-  return '__imagex_output' in (value as Record<string, unknown>);
-}
-
-function isMeaningfulObject(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  if (typeof value !== 'object') return true;
-  if (isOutputMarker(value)) return false;
-  return Object.keys(value).length > 0;
+  const dynField = fields.find((f) => f.id === field.id);
+  if (dynField && dynField.value !== undefined && dynField.value !== null && dynField.value !== '') return dynField.value;
+  return undefined;
 }
 
 function stringField(node: ImageXNode | undefined, key: string, fallback = ''): string {
@@ -299,4 +374,10 @@ function enumField<const T extends readonly string[]>(
 ): T[number] {
   const value = node?.data[key];
   return typeof value === 'string' && allowed.includes(value) ? value : fallback;
+}
+
+function isMeaningfulObject(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value !== 'object') return true;
+  return Object.keys(value).length > 0;
 }
