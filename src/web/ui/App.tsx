@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
-import { Box, Component, FileText, Frame, Image, Layers3, MapPin, Palette, Search, UserRound, X } from 'lucide-react';
+import { Box, Component, FileText, Frame, Image, Layers3, MapPin, Palette, UserRound } from 'lucide-react';
 import type {
   CustomFieldDefinition,
   CustomFieldKind,
@@ -15,10 +15,14 @@ import type {
   NodeType,
   OutputNodeResult,
 } from '../../shared/types.js';
+import { AssetsPanel } from './editor/AssetsPanel.js';
 import { FlowEditor } from './editor/FlowEditor.js';
 import { InspectorPanel, InspectorToggle } from './editor/InspectorPanel.js';
+import { NodesPanel } from './editor/NodesPanel.js';
 import { Sidebar } from './editor/Sidebar.js';
-import { Toolbar } from './editor/Toolbar.js';
+import { SidePanel } from './editor/SidePanel.js';
+import { TopBar } from './editor/TopBar.js';
+import { WorkflowsPanel } from './editor/WorkflowsPanel.js';
 import { createUiWorkflowNode, syncFlowToWorkflow, workflowToFlow } from './flow/adapters.js';
 import { nodeMeta } from './flow/meta.js';
 import type { UiEdge, UiNode } from './flow/types.js';
@@ -96,11 +100,8 @@ export function App() {
   const [assets, setAssets] = useState<ImageXAsset[]>([]);
   const [nodeAssets, setNodeAssets] = useState<ImageXNodeAsset[]>([]);
   const [assetPicker, setAssetPicker] = useState<{ nodeId: string; fieldId: string } | null>(null);
-  const [showAssetLibrary, setShowAssetLibrary] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
-  const [showNodePopup, setShowNodePopup] = useState(false);
-  const [nodeQuery, setNodeQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [textDialog, setTextDialog] = useState<TextDialogState>(null);
@@ -108,10 +109,11 @@ export function App() {
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem('imagex.fontScale')) || 1);
   const [historyLimit, setHistoryLimit] = useState(() => clampHistoryLimit(Number(localStorage.getItem('imagex.historyLimit')) || 50));
   const [historyVersion, setHistoryVersion] = useState(0);
-  const [leftWidth, setLeftWidth] = useState(() => Number(localStorage.getItem('imagex.leftWidth')) || 230);
   const [rightWidth, setRightWidth] = useState(() => Number(localStorage.getItem('imagex.rightWidth')) || 340);
-  const [leftCollapsed, setLeftCollapsed] = useState(() => localStorage.getItem('imagex.leftCollapsed') === 'true');
   const [rightOpen, setRightOpen] = useState(() => localStorage.getItem('imagex.rightOpen') !== 'false');
+  const [activeSidePanel, setActiveSidePanel] = useState<string | null>(null);
+  const [sidePanelWidth, setSidePanelWidth] = useState(() => Number(localStorage.getItem('imagex.sidePanelWidth')) || 260);
+  const [workflowSearchQuery, setWorkflowSearchQuery] = useState('');
   const [activeCustomField, setActiveCustomField] = useState<{ nodeId: string; fieldId: string } | null>(null);
   const activeCustomFieldRef = useRef<{ nodeId: string; fieldId: string } | null>(null);
   const notificationTimer = useRef<number | null>(null);
@@ -144,16 +146,12 @@ export function App() {
   }, [fontScale]);
 
   useEffect(() => {
-    localStorage.setItem('imagex.leftCollapsed', String(leftCollapsed));
-  }, [leftCollapsed]);
-
-  useEffect(() => {
     localStorage.setItem('imagex.rightOpen', String(rightOpen));
   }, [rightOpen]);
 
   useEffect(() => {
-    localStorage.setItem('imagex.leftWidth', String(leftWidth));
-  }, [leftWidth]);
+    localStorage.setItem('imagex.sidePanelWidth', String(sidePanelWidth));
+  }, [sidePanelWidth]);
 
   useEffect(() => {
     localStorage.setItem('imagex.rightWidth', String(rightWidth));
@@ -237,27 +235,6 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!showNodePopup) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setShowNodePopup(false);
-        return;
-      }
-      if (event.key === 'Backspace') {
-        event.preventDefault();
-        setNodeQuery((current) => current.slice(0, -1));
-        return;
-      }
-      if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        event.preventDefault();
-        setNodeQuery((current) => `${current}${event.key}`);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showNodePopup]);
-
-  useEffect(() => {
     if (!bootstrapped.current || !project || !workflow) return;
     const handle = window.setTimeout(() => {
       const wrapped = wrapFramesAroundMembers(nodes);
@@ -286,7 +263,7 @@ export function App() {
   );
 
   useShortcuts(editorShortcuts, {
-    'toggle-add-node': () => setShowNodePopup((open) => !open),
+    'toggle-add-node': () => setActiveSidePanel((current) => (current === 'nodes' ? null : 'nodes')),
     'delete-selection': deleteSelection,
     'clear-selection': clearSelection,
     'detach-frame': detachSelectionFromFrames,
@@ -587,7 +564,7 @@ export function App() {
   }
 
   function openAssetLibrary() {
-    setShowAssetLibrary(true);
+    setActiveSidePanel((current) => (current === 'assets' ? null : 'assets'));
     void refreshAssets();
     void refreshNodeAssets();
   }
@@ -932,7 +909,7 @@ export function App() {
     if (response.ok) {
       const data = (await response.json()) as { assets: ImageXNodeAsset[] };
       setNodeAssets(data.assets);
-      setShowAssetLibrary(true);
+      setActiveSidePanel('assets');
     }
   }
 
@@ -997,8 +974,7 @@ export function App() {
     applyWorkflow(nextWorkflow);
     setSelectedId(nextNode.id);
     setPlacingNodeId(nextNode.id);
-    setShowNodePopup(false);
-    setNodeQuery('');
+    setActiveSidePanel(null);
   }
 
   function addWorkflowNodesForPlacement(newNodes: ImageXNode[], newEdges: ImageXEdge[], rootNodeId: string) {
@@ -1020,8 +996,7 @@ export function App() {
     applyWorkflow(nextWorkflow);
     setSelectedId(rootNodeId);
     setPlacingNodeId(rootNodeId);
-    setShowNodePopup(false);
-    setNodeQuery('');
+    setActiveSidePanel(null);
   }
 
   function addImageAssetNode(asset: ImageXAsset) {
@@ -1035,7 +1010,7 @@ export function App() {
       assetName: asset.name,
     };
     addWorkflowNodesForPlacement([node], [], node.id);
-    setShowAssetLibrary(false);
+    setActiveSidePanel(null);
   }
 
   function addNodeAsset(asset: ImageXNodeAsset) {
@@ -1065,7 +1040,7 @@ export function App() {
         return nextEdge;
       });
     addWorkflowNodesForPlacement(newNodes, newEdges, rootNewId);
-    setShowAssetLibrary(false);
+    setActiveSidePanel(null);
   }
 
   function handlePlacingMove(nodeId: string, position: { x: number; y: number }) {
@@ -1432,68 +1407,94 @@ export function App() {
   }
 
   return (
-    <main
-      className={`app-shell ${leftCollapsed ? 'left-collapsed' : ''} ${rightOpen ? '' : 'right-collapsed'}`}
-      style={
-        {
-          '--left-panel': `${leftCollapsed ? 64 : leftWidth}px`,
-          '--right-panel': `${rightOpen ? rightWidth : 52}px`,
-        } as CSSProperties
-      }
-    >
-      <Sidebar
-        projectTitle={project.metadata.title}
+    <main className="app-shell">
+      <TopBar
         workflows={projectWorkflows(project)}
         activeWorkflowId={workflow.id}
         onSelectWorkflow={selectWorkflow}
         onCreateWorkflow={createWorkflow}
-        onDeleteWorkflow={deleteWorkflow}
-        onWorkflowMenu={(workflowId, position) => setMenu({ type: 'workflow', workflowId, x: position.x, y: position.y })}
-        onOpenAssets={openAssetLibrary}
-        onOpenSettings={() => openSettingsRoute()}
-        onOpenShortcuts={() => setShowShortcuts(true)}
-        collapsed={leftCollapsed}
-        onToggleCollapsed={() => setLeftCollapsed((collapsed) => !collapsed)}
+        onRun={runWorkflow}
+        onCloseProject={closeProject}
+        status={status}
+        canRun={Boolean(workflow)}
       />
-      {!leftCollapsed && <ResizeHandle side="left" onResize={setLeftWidth} min={190} max={340} />}
-      <section className="workspace">
-        <Toolbar
-          workflowName={workflow?.name || ''}
-          onRename={renameWorkflow}
-          status={status}
-          onRun={runWorkflow}
-          onCloseProject={closeProject}
-          onAddNode={() => setShowNodePopup(true)}
-          canRun={Boolean(workflow)}
+      <div
+        className={`app-body ${activeSidePanel ? 'side-panel-open' : ''} ${rightOpen ? '' : 'right-collapsed'}`}
+        style={
+          {
+            '--side-panel': `${activeSidePanel ? sidePanelWidth : 0}px`,
+            '--right-panel': `${rightOpen ? rightWidth : 52}px`,
+          } as CSSProperties
+        }
+      >
+        <Sidebar
+          activePanel={activeSidePanel}
+          onOpenPanel={(id) => setActiveSidePanel((current) => (current === id ? null : id))}
+          onOpenModal={(id) => {
+            if (id === 'settings') openSettingsRoute();
+            if (id === 'shortcuts') setShowShortcuts(true);
+          }}
         />
-        <FlowEditor
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={updateFlowNodes}
-          onEdgesChange={updateFlowEdges}
-          onSelectNode={setSelectedId}
-          onNodeMenu={openNodeMenu}
-          onBeforeChange={recordHistory}
-          onPaneMenu={(position, flowPosition) => setMenu({ type: 'pane', x: position.x, y: position.y, flowX: flowPosition.x, flowY: flowPosition.y })}
-          onSelectionMenu={(position) => setMenu({ type: 'selection', x: position.x, y: position.y })}
-          onSelectionChangeIds={handleSelectionChange}
-          onFrameDrag={moveFrameContents}
-          onNodeDragHoverFrame={handleNodeDragFrameState}
-          onNodeDragStopCheckFrames={expandFramesForNode}
-          onPaneClickClear={clearSelection}
-          onCommitFlow={() => commitFlowToWorkflow()}
-          onFlowReady={(api) => { flowApiRef.current = api; }}
-          placingNodeId={placingNodeId}
-          onPlacingMove={handlePlacingMove}
-          onPlacingDrop={handlePlacingDrop}
-        />
-      </section>
-      {rightOpen && <ResizeHandle side="right" onResize={setRightWidth} min={280} max={520} />}
-      {rightOpen ? (
-        <InspectorPanel node={selectedNode} onChange={updateNodeData} outputResults={outputResults} onClose={() => setRightOpen(false)} />
-      ) : (
-        <InspectorToggle onOpen={() => setRightOpen(true)} />
-      )}
+        {activeSidePanel && (
+          <>
+            <SidePanel onClose={() => setActiveSidePanel(null)}>
+              {activeSidePanel === 'workflows' && (
+                <WorkflowsPanel
+                  workflows={projectWorkflows(project)}
+                  activeWorkflowId={workflow.id}
+                  onSelect={selectWorkflow}
+                  onCreate={createWorkflow}
+                  onMenu={(workflowId, position) => setMenu({ type: 'workflow', workflowId, x: position.x, y: position.y })}
+                  searchQuery={workflowSearchQuery}
+                  onSearch={setWorkflowSearchQuery}
+                />
+              )}
+              {activeSidePanel === 'nodes' && <NodesPanel onAdd={addNode} />}
+              {activeSidePanel === 'assets' && workflow && (
+                <AssetsPanel
+                  assets={assets}
+                  nodeAssets={nodeAssets}
+                  onImport={importAssets}
+                  onAddImageAsset={addImageAssetNode}
+                  onAddNodeAsset={addNodeAsset}
+                  onRename={renameAsset}
+                  onDelete={deleteAsset}
+                />
+              )}
+            </SidePanel>
+            <ResizeHandle side="left" onResize={setSidePanelWidth} min={200} max={400} />
+          </>
+        )}
+        <section className="workspace">
+          <FlowEditor
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={updateFlowNodes}
+            onEdgesChange={updateFlowEdges}
+            onSelectNode={setSelectedId}
+            onNodeMenu={openNodeMenu}
+            onBeforeChange={recordHistory}
+            onPaneMenu={(position, flowPosition) => setMenu({ type: 'pane', x: position.x, y: position.y, flowX: flowPosition.x, flowY: flowPosition.y })}
+            onSelectionMenu={(position) => setMenu({ type: 'selection', x: position.x, y: position.y })}
+            onSelectionChangeIds={handleSelectionChange}
+            onFrameDrag={moveFrameContents}
+            onNodeDragHoverFrame={handleNodeDragFrameState}
+            onNodeDragStopCheckFrames={expandFramesForNode}
+            onPaneClickClear={clearSelection}
+            onCommitFlow={() => commitFlowToWorkflow()}
+            onFlowReady={(api) => { flowApiRef.current = api; }}
+            placingNodeId={placingNodeId}
+            onPlacingMove={handlePlacingMove}
+            onPlacingDrop={handlePlacingDrop}
+          />
+        </section>
+        {rightOpen && <ResizeHandle side="right" onResize={setRightWidth} min={280} max={520} />}
+        {rightOpen ? (
+          <InspectorPanel node={selectedNode} onChange={updateNodeData} outputResults={outputResults} onClose={() => setRightOpen(false)} />
+        ) : (
+          <InspectorToggle onOpen={() => setRightOpen(true)} />
+        )}
+      </div>
       {menu && (
         <FloatingContextMenu
           menu={menu}
@@ -1508,7 +1509,6 @@ export function App() {
           onAction={handleMenuAction}
         />
       )}
-      {showNodePopup && <AddNodePopup query={nodeQuery} onQuery={setNodeQuery} onClose={() => setShowNodePopup(false)} onAdd={addNode} />}
       {showSettings && (
         <SettingsModal
           auth={auth}
@@ -1530,19 +1530,6 @@ export function App() {
           onRename={renameAsset}
           onDelete={deleteAsset}
           onClose={() => setAssetPicker(null)}
-        />
-      )}
-
-      {showAssetLibrary && workflow && (
-        <ProjectAssetsModal
-          assets={assets}
-          nodeAssets={nodeAssets}
-          onImport={importAssets}
-          onAddImageAsset={addImageAssetNode}
-          onAddNodeAsset={addNodeAsset}
-          onRename={renameAsset}
-          onDelete={deleteAsset}
-          onClose={() => setShowAssetLibrary(false)}
         />
       )}
 
@@ -1870,62 +1857,6 @@ const nodeChoices: Array<{ type: NodeType; label: string; description: string; i
   { type: 'custom', label: 'Custom', description: 'Build your own node', icon: Component },
 ];
 
-function AddNodePopup({
-  query,
-  onQuery,
-  onClose,
-  onAdd,
-}: {
-  query: string;
-  onQuery: (query: string) => void;
-  onClose: () => void;
-  onAdd: (type: NodeType) => void;
-}) {
-  const normalized = query.trim().toLowerCase();
-  const filtered = nodeChoices.filter((node) => `${node.label} ${node.description}`.toLowerCase().includes(normalized));
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Enter' && filtered.length > 0) {
-        event.preventDefault();
-        onAdd(filtered[0]!.type);
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [filtered, onAdd, onClose]);
-
-  return (
-    <div className="node-popup-backdrop" onMouseDown={onClose}>
-      <section className="node-popup" onMouseDown={(event) => event.stopPropagation()}>
-        <header>
-          <Search size={16} />
-          <span>{query || 'Type to filter nodes...'}</span>
-          {query && <Button variant="ghost" size="icon" onClick={() => onQuery('')}><X size={14} /></Button>}
-        </header>
-        <div className="node-popup-list">
-          {filtered.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Button key={item.type} variant="ghost" className="node-choice" onClick={() => onAdd(item.type)}>
-                <Icon size={17} />
-                <span>
-                  <strong>{item.label}</strong>
-                  <small>{item.description}</small>
-                </span>
-              </Button>
-            );
-          })}
-        </div>
-      </section>
-    </div>
-  );
-}
-
 function AssetsModal({
   assets,
   onImport,
@@ -1989,111 +1920,6 @@ function AssetsModal({
             ))}
             {assets.length === 0 && <p className="muted">No image assets in this project yet.</p>}
           </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function ProjectAssetsModal({
-  assets,
-  nodeAssets,
-  onImport,
-  onAddImageAsset,
-  onAddNodeAsset,
-  onRename,
-  onDelete,
-  onClose,
-}: {
-  assets: ImageXAsset[];
-  nodeAssets: ImageXNodeAsset[];
-  onImport: (files: FileList | null) => void;
-  onAddImageAsset: (asset: ImageXAsset) => void;
-  onAddNodeAsset: (asset: ImageXNodeAsset) => void;
-  onRename: (assetId: string) => void;
-  onDelete: (assetId: string) => void;
-  onClose: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [tab, setTab] = useState<'images' | 'nodes'>('images');
-  const handleBackdrop = useDismiss(onClose);
-  return (
-    <div className="prompt-overlay-backdrop" role="dialog" aria-modal="true" onClick={handleBackdrop}>
-      <section className="assets-modal project-assets-modal">
-        <header>
-          <div>
-            <h2>Project Assets</h2>
-            <p>Reusable project material shared across workflows.</p>
-          </div>
-          <div className="modal-actions">
-            {tab === 'images' && <Button variant="secondary" onClick={() => inputRef.current?.click()}>Import Images</Button>}
-            <Button variant="outline" onClick={onClose}>Close</Button>
-          </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={(event) => {
-              void onImport(event.target.files);
-              event.currentTarget.value = '';
-            }}
-          />
-        </header>
-        <div className="assets-body">
-          <aside>
-            <Button variant={tab === 'images' ? 'secondary' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTab('images')}>
-              <Image size={16} />
-              Images
-              <span className="asset-count">{assets.length}</span>
-            </Button>
-            <Button variant={tab === 'nodes' ? 'secondary' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTab('nodes')}>
-              <Layers3 size={16} />
-              Nodes
-              <span className="asset-count">{nodeAssets.length}</span>
-            </Button>
-          </aside>
-          {tab === 'images' ? (
-            <div className="asset-grid">
-              {assets.map((asset) => (
-                <article key={asset.id} className="asset-card">
-                  <button type="button" onClick={() => onAddImageAsset(asset)}>
-                    <span className="asset-thumbnail">
-                      <img src={asset.url} alt={asset.name} loading="lazy" />
-                    </span>
-                    <span>{asset.name}</span>
-                  </button>
-                  <div>
-                    <Button variant="ghost" size="sm" onClick={() => onRename(asset.id)}>Rename</Button>
-                    <Button variant="ghost" size="sm" onClick={() => onDelete(asset.id)}>Delete</Button>
-                  </div>
-                </article>
-              ))}
-              {assets.length === 0 && <p className="muted">No image assets in this project yet.</p>}
-            </div>
-          ) : (
-            <div className="asset-node-list">
-              {nodeAssets.map((asset) => {
-                const meta = nodeMeta[asset.nodeType];
-                const Icon = meta.icon;
-                return (
-                  <button key={asset.id} type="button" className="asset-node-card" onClick={() => onAddNodeAsset(asset)}>
-                    <span className="asset-node-icon" style={{ color: meta.accent }}>
-                      <Icon size={17} />
-                    </span>
-                    <div>
-                      <strong>{asset.name}</strong>
-                      <span>
-                        {meta.label} asset · {asset.nodes.length} node{asset.nodes.length === 1 ? '' : 's'}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-              {nodeAssets.length === 0 && <p className="muted">No reusable node assets yet.</p>}
-            </div>
-          )}
         </div>
       </section>
     </div>

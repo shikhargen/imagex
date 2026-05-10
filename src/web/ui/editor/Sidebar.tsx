@@ -1,95 +1,77 @@
-import { FilePlus2, Image, Keyboard, Menu, Plus, Settings } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import {
+  Box,
+  HelpCircle,
+  Image,
+  Keyboard,
+  Layers3,
+  Settings,
+} from 'lucide-react';
 
-export type SidebarWorkflow = {
+export type SidebarItem = {
   id: string;
-  title: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number }>;
+  section: 'top' | 'bottom';
+  modal?: boolean;
 };
 
+export const sidebarItems: SidebarItem[] = [
+  { id: 'assets', label: 'Assets', icon: Image, section: 'top' },
+  { id: 'nodes', label: 'Nodes', icon: Box, section: 'top' },
+  { id: 'workflows', label: 'Workflows', icon: Layers3, section: 'top' },
+  { id: 'help', label: 'Help', icon: HelpCircle, section: 'bottom', modal: true },
+  { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, section: 'bottom', modal: true },
+  { id: 'settings', label: 'Settings', icon: Settings, section: 'bottom', modal: true },
+];
+
 export function Sidebar({
-  projectTitle,
-  workflows,
-  activeWorkflowId,
-  onSelectWorkflow,
-  onCreateWorkflow,
-  onDeleteWorkflow,
-  onWorkflowMenu,
-  onOpenAssets,
-  onOpenSettings,
-  onOpenShortcuts,
-  collapsed,
-  onToggleCollapsed,
+  activePanel,
+  onOpenPanel,
+  onOpenModal,
 }: {
-  projectTitle: string;
-  workflows: SidebarWorkflow[];
-  activeWorkflowId: string | null;
-  onSelectWorkflow: (workflowId: string) => void;
-  onCreateWorkflow: () => void;
-  onDeleteWorkflow: (workflowId: string) => void;
-  onWorkflowMenu: (workflowId: string, position: { x: number; y: number }) => void;
-  onOpenAssets: () => void;
-  onOpenSettings: () => void;
-  onOpenShortcuts: () => void;
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
+  activePanel: string | null;
+  onOpenPanel: (panelId: string) => void;
+  onOpenModal: (modalId: string) => void;
 }) {
+  const top = sidebarItems.filter((i) => i.section === 'top');
+  const bottom = sidebarItems.filter((i) => i.section === 'bottom');
+
   return (
-    <aside className={`sidebar project-sidebar ${collapsed ? 'collapsed' : ''}`}>
-      <div className="brand">
-        <span className="brand-mark">X</span>
-        {!collapsed && <span>imagex</span>}
-        <Button variant="ghost" size="icon" type="button" className="sidebar-toggle" aria-label="Toggle sidebar" onClick={onToggleCollapsed}>
-          <Menu size={17} />
-        </Button>
-      </div>
-
-      {!collapsed && (
-        <section className="project-switcher">
-          <span>Project</span>
-          <strong>{projectTitle}</strong>
-        </section>
-      )}
-
-      <nav className="primary-nav compact">
-        <Button variant="ghost" className="w-full justify-start gap-2 px-3 sidebar-icon-button" type="button" title="Assets" onClick={onOpenAssets}>
-          <Image size={17} /> {!collapsed && 'Assets'}
-        </Button>
-      </nav>
-
-      <section className="workflow-list">
-        <header>
-          {!collapsed && <span>Workflows</span>}
-          <Button variant="ghost" size="icon" type="button" aria-label="Create workflow" title="Create workflow" onClick={onCreateWorkflow}>
-            <Plus size={15} />
-          </Button>
-        </header>
-        <div>
-          {workflows.map((workflow) => (
-            <Button
-              key={workflow.id}
-              variant={workflow.id === activeWorkflowId ? 'secondary' : 'ghost'}
-              className="h-9 w-full justify-start gap-2 overflow-hidden px-3 text-left"
-              onClick={() => onSelectWorkflow(workflow.id)}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                onWorkflowMenu(workflow.id, { x: event.clientX, y: event.clientY });
-              }}
-              title={workflow.title}
+    <aside className="thin-sidebar">
+      <div className="thin-sidebar-top">
+        {top.map((item) => {
+          const Icon = item.icon;
+          const active = activePanel === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`thin-sidebar-btn ${active ? 'active' : ''}`}
+              onClick={() => onOpenPanel(item.id)}
+              title={item.label}
             >
-              <FilePlus2 size={15} />
-              {!collapsed && <span>{workflow.title}</span>}
-            </Button>
-          ))}
-        </div>
-      </section>
-
-      <div className="sidebar-footer">
-        <Button variant="ghost" className="w-full justify-start gap-2 px-3 sidebar-icon-button" onClick={onOpenShortcuts} title="Shortcuts">
-          <Keyboard size={17} /> {!collapsed && 'Shortcuts'}
-        </Button>
-        <Button variant="ghost" className="w-full justify-start gap-2 px-3 sidebar-icon-button" onClick={onOpenSettings} title="Settings">
-          <Settings size={17} /> {!collapsed && 'Settings'}
-        </Button>
+              <Icon size={20} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="thin-sidebar-bottom">
+        {bottom.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className="thin-sidebar-btn"
+              onClick={() => onOpenModal(item.id)}
+              title={item.label}
+            >
+              <Icon size={20} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
       </div>
     </aside>
   );

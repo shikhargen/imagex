@@ -4,6 +4,17 @@ import { access, readFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+function log(scope: string, message: string, extra?: Record<string, unknown>): void {
+  const ts = new Date().toISOString();
+  const extraStr = extra ? ` ${JSON.stringify(extra)}` : '';
+  console.log(`[${ts}] [${scope}] ${message}${extraStr}`);
+}
+
+function logRequest(req: Request, res: Response, start: number): void {
+  const duration = Date.now() - start;
+  log('http', `${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+}
 import { imagexPaths } from '../config/paths.js';
 import { getCodexAuthStatus, resolveCodexBearerToken } from '../auth/store.js';
 import { generateCodexImages } from '../providers/codexImage.js';
@@ -41,6 +52,11 @@ export type StartServerOptions = {
 export async function startServer(options: StartServerOptions): Promise<Server> {
   const app = express();
   app.use(express.json({ limit: '25mb' }));
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => logRequest(req, res, start));
+    next();
+  });
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, name: 'imagex' });
@@ -211,15 +227,20 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
 
   app.post('/api/projects/:projectId/generate', async (req: Request<{ projectId: string }, unknown, GenerateWorkflowRequest>, res, next) => {
     try {
+      const projectId = req.params.projectId;
+      const outputNodes = req.body.workflow.nodes.filter((n) => n.type === 'output');
+      log('generate', 'starting workflow generation', { projectId, outputNodes: outputNodes.length });
       const bearerToken = await resolveCodexBearerToken();
       const results = await executeWorkflowOutputNodes(
         req.body.workflow,
         bearerToken,
-        req.params.projectId
+        projectId
       );
-      await saveProjectWorkflow(req.params.projectId, req.body.workflow);
+      log('generate', 'workflow generation complete', { projectId, results: results.length });
+      await saveProjectWorkflow(projectId, req.body.workflow);
       res.json({ results });
     } catch (error) {
+      log('generate', 'workflow generation failed', { projectId: req.params.projectId, error: String(error) });
       next(error);
     }
   });
@@ -281,11 +302,14 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
 
   app.post('/api/generate', async (req: Request<unknown, unknown, GenerateWorkflowRequest>, res, next) => {
     try {
+      log('generate', 'starting non-project workflow generation');
       const bearerToken = await resolveCodexBearerToken();
       const results = await executeWorkflowOutputNodes(req.body.workflow, bearerToken);
+      log('generate', 'non-project workflow generation complete', { results: results.length });
       await saveWorkflow(req.body.workflow);
       res.json({ results });
     } catch (error) {
+      log('generate', 'non-project workflow generation failed', { error: String(error) });
       next(error);
     }
   });
@@ -329,13 +353,17 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
       const file = decodeURIComponent(req.params.file || '');
       const outputsRoot = resolve(projectOutputDir(projectId));
       const target = resolve(outputsRoot, file);
+      log('outputs', 'serving file', { projectId, file, target, outputsRoot });
       if (relative(outputsRoot, target).startsWith('..')) {
         res.status(403).end();
         return;
       }
-      await access(target);
-      res.sendFile(target);
+      const buffer = await readFile(target);
+      const ext = extname(target).slice(1) || 'png';
+      const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+      res.type(mimeType).send(buffer);
     } catch (error) {
+      log('outputs', 'failed to serve file', { projectId: req.params.projectId, file: req.params.file, error: String(error) });
       next(error);
     }
   });
@@ -350,8 +378,10 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
         res.status(403).end();
         return;
       }
-      await access(target);
-      res.sendFile(target);
+      const buffer = await readFile(target);
+      const ext = extname(target).slice(1) || 'png';
+      const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+      res.type(mimeType).send(buffer);
     } catch (error) {
       next(error);
     }
@@ -366,7 +396,12 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     projectId?: string
   ): Promise<OutputNodeResult[]> {
     const outputNodes = workflow.nodes.filter((n) => n.type === 'output');
-    if (outputNodes.length === 0) return [];
+    if (outputNodes.length === 0) {
+      log('executor', 'no output nodes found');
+      return [];
+    }
+
+    log('executor', 'discovered output nodes', { count: outputNodes.length, ids: outputNodes.map((n) => n.id) });
 
     // Build dependency graph: targetId -> Set of source output node ids
     const dependencies = new Map<string, Set<string>>();
@@ -407,19 +442,27 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
       throw new Error('Circular dependency detected between output nodes');
     }
 
+    log('executor', 'execution order', { order });
+
     const results = new Map<string, GeneratedImage[]>();
     const outputResults: OutputNodeResult[] = [];
 
     for (const outputNodeId of order) {
+      log('executor', 'compiling output node', { outputNodeId });
       const compiled = compileOutputNodeWorkflow(workflow, outputNodeId);
-      if (!compiled) continue;
+      if (!compiled) {
+        log('executor', 'compilation returned null, skipping', { outputNodeId });
+        continue;
+      }
 
       const { prompt, options } = compiled;
+      log('executor', 'compiled output node', { outputNodeId, refs: options.references?.length || 0 });
 
       // Resolve static image references
       if (projectId) {
         const resolved = await resolveImageReferences(projectId, options.references);
         options.references = resolved;
+        log('executor', 'resolved image references', { outputNodeId, resolved: resolved.length });
       }
 
       // Gather upstream generated images from dependent output nodes
@@ -427,7 +470,9 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
       const extraImages: Array<{ dataUrl: string }> = [];
       for (const upstreamId of upstreamIds) {
         const upstreamImages = results.get(upstreamId) || [];
+        log('executor', 'attaching upstream images', { outputNodeId, upstreamId, count: upstreamImages.length });
         for (const img of upstreamImages) {
+          log('executor', 'reading upstream image', { outputNodeId, upstreamId, path: img.path });
           const file = await readFile(img.path);
           const ext = extname(img.path).slice(1) || 'png';
           const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
@@ -437,6 +482,7 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
         }
       }
 
+      log('executor', 'generating images', { outputNodeId, count: options.count, extraImages: extraImages.length });
       const images = await generateCodexImages(
         options,
         bearerToken,
@@ -448,6 +494,7 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
           : undefined,
         extraImages
       );
+      log('executor', 'images generated', { outputNodeId, count: images.length, urls: images.map((i) => i.url) });
 
       results.set(outputNodeId, images);
       outputResults.push({ outputNodeId, prompt, images });
