@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/geist';
+@import './ui/components/dropdown.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -153,6 +154,7 @@ button {
 }
 
 .app-body {
+  position: relative;
   display: grid;
   grid-template-columns: 3.4rem minmax(0, 1fr) 0.278rem var(--right-panel, 18.889rem);
   min-height: 0;
@@ -160,10 +162,7 @@ button {
 }
 
 .app-body.side-panel-open {
-  grid-template-columns: 3.4rem var(--side-panel, 16.111rem) 0.278rem minmax(0, 1fr) 0.278rem var(
-      --right-panel,
-      18.889rem
-    );
+  grid-template-columns: 3.4rem minmax(0, 1fr) 0.278rem var(--right-panel, 18.889rem);
 }
 
 .app-body.right-collapsed {
@@ -171,10 +170,17 @@ button {
 }
 
 .app-body.side-panel-open.right-collapsed {
-  grid-template-columns: 3.4rem var(--side-panel, 16.111rem) 0.278rem minmax(0, 1fr) var(
-      --right-panel,
-      2.889rem
-    );
+  grid-template-columns: 3.4rem minmax(0, 1fr) var(--right-panel, 2.889rem);
+}
+
+.side-panel-overlay {
+  position: absolute;
+  top: 0;
+  left: 3.4rem;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.3);
 }
 
 

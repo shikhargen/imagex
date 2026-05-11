@@ -1,8 +1,9 @@
 .side-panel {
   position: relative;
-  z-index: 2;
+  z-index: 20;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
+  height: 100%;
   overflow: hidden;
   border-right: 1px solid var(--ui-border-default);
   background: var(--ui-bg-surface);

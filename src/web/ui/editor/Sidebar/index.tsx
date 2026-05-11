@@ -54,8 +54,6 @@ export function Sidebar({
 
   const menuItems = useMemo(
     () => [
-      { id: 'exit-project', label: 'Back to projects' },
-      { type: 'separator' },
       { id: 'file-new-workflow', label: 'New workflow' },
       { id: 'file-rename-workflow', label: 'Rename workflow' },
       { id: 'file-compile-prompt', label: 'Compile prompt' },
@@ -93,6 +91,8 @@ export function Sidebar({
           { id: 'settings-shortcuts', label: 'Keyboard shortcuts' },
         ],
       },
+      { type: 'separator' },
+      { id: 'exit-project', label: 'Back to projects' },
     ],
     [rightOpen, showMinimap]
   );

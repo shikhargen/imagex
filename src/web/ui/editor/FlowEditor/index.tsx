@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { NodeType } from '../../../../shared/types.js';
 import { nodeMeta } from '../../flow/meta.js';
 import { flowStore, useFlowNodes, useFlowEdges } from '../../../state/flowStore.js';
-import { isCompatibleConnection, portLabel } from '../../flow/ports.js';
+import { isCompatibleConnection } from '../../flow/ports.js';
 import type { UiEdge, UiNode } from '../../flow/types.js';
 import {
   BlurNode,
@@ -339,8 +339,6 @@ export function FlowEditor({
 
 function styleConnection(connection: Connection, source: UiNode | undefined, target: UiNode | undefined): UiEdge {
   const accent = source ? nodeMeta[source.type as NodeType].accent : '#7a7a7a';
-  const sourceLabel = portLabel(source?.data.workflowNode, connection.sourceHandle);
-  const targetLabel = portLabel(target?.data.workflowNode, connection.targetHandle);
   return {
     id: `${connection.source}-${connection.sourceHandle}-${connection.target}-${connection.targetHandle}`,
     source: connection.source || '',
@@ -349,12 +347,6 @@ function styleConnection(connection: Connection, source: UiNode | undefined, tar
     targetHandle: connection.targetHandle ?? null,
     type: 'default',
     reconnectable: true,
-    label: sourceLabel && sourceLabel === targetLabel ? sourceLabel : targetLabel || sourceLabel || '',
-    labelShowBg: true,
-    labelBgBorderRadius: 4,
-    labelBgPadding: [4, 2],
-    labelStyle: { fill: '#aab1bd', fontSize: 14, fontWeight: 700 },
-    labelBgStyle: { fill: '#202124', stroke: '#3a3a3a' },
     markerEnd: {
       type: MarkerType.ArrowClosed,
       width: 14,

@@ -15,20 +15,23 @@ type Props = {
 
 export function CropArea({ x, y, cropWidth, cropHeight, imageWidth, imageHeight, aspectRatio, onCropChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
+  const [containerWidth, setContainerWidth] = useState(0);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const observer = new ResizeObserver(() => {
-      setContainerSize({ w: el.clientWidth, h: el.clientHeight });
+      setContainerWidth(el.clientWidth);
     });
     observer.observe(el);
-    setContainerSize({ w: el.clientWidth, h: el.clientHeight });
+    setContainerWidth(el.clientWidth);
     return () => observer.disconnect();
   }, []);
 
-  const scale = imageWidth > 0 && containerSize.w > 0 ? containerSize.w / imageWidth : 1;
+  // Derive container height from width using the source image aspect ratio
+  // This ensures the overlay always matches the canvas (which also preserves aspect ratio)
+  const scale = imageWidth > 0 && containerWidth > 0 ? containerWidth / imageWidth : 1;
+  const containerHeight = imageHeight > 0 ? Math.round(imageHeight * scale) : 0;
 
   // Use getBoundingClientRect for SCREEN-space scale (accounts for ReactFlow zoom)
   const getScreenScale = () => {
@@ -184,7 +187,7 @@ export function CropArea({ x, y, cropWidth, cropHeight, imageWidth, imageHeight,
 
   return (
     <div ref={containerRef} className="ix-crop-area nodrag" style={{ position: 'absolute', inset: 0 }}>
-      <CropOverlay x={sx} y={sy} width={sw} height={sh} containerWidth={containerSize.w} containerHeight={containerSize.h} />
+      <CropOverlay x={sx} y={sy} width={sw} height={sh} containerWidth={containerWidth} containerHeight={containerHeight} />
 
       {/* Box drag region (inside crop) */}
       <div

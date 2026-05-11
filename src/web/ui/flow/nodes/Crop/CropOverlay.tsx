@@ -1,3 +1,5 @@
+import { useId } from 'react';
+
 type Props = {
   x: number;
   y: number;
@@ -8,21 +10,24 @@ type Props = {
 };
 
 export function CropOverlay({ x, y, width, height, containerWidth, containerHeight }: Props) {
+  const maskId = useId();
+
   if (width <= 0 || height <= 0) return null;
 
   return (
     <svg
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
       viewBox={`0 0 ${containerWidth} ${containerHeight}`}
+      preserveAspectRatio="none"
     >
       {/* Dark mask outside crop */}
       <defs>
-        <mask id="crop-mask">
+        <mask id={maskId}>
           <rect width={containerWidth} height={containerHeight} fill="white" />
           <rect x={x} y={y} width={width} height={height} fill="black" />
         </mask>
       </defs>
-      <rect width={containerWidth} height={containerHeight} fill="rgba(0,0,0,0.5)" mask="url(#crop-mask)" />
+      <rect width={containerWidth} height={containerHeight} fill="rgba(0,0,0,0.5)" mask={`url(#${maskId})`} />
 
       {/* Crop border */}
       <rect x={x} y={y} width={width} height={height} fill="none" stroke="#facc15" strokeWidth="1.5" />

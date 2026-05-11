@@ -428,7 +428,7 @@ export function App() {
           rightOpen={rightOpen}
         />
         {activeSidePanel && (
-          <>
+          <div className="side-panel-overlay" style={{ width: `calc(var(--side-panel, 16rem) + 0.278rem)` }}>
             <SidePanel onClose={() => setActiveSidePanel(null)}>
               {activeSidePanel === 'workflows' && (
                 <WorkflowsPanel
@@ -454,7 +454,7 @@ export function App() {
               )}
             </SidePanel>
             <ResizeHandle side="left" onResize={setSidePanelWidth} min={200} max={400} />
-          </>
+          </div>
         )}
         <section className="workspace">
           <FlowEditor
