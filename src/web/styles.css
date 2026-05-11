@@ -180,7 +180,11 @@ button {
   bottom: 0;
   z-index: 20;
   display: flex;
-  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.side-panel-overlay > * {
+  pointer-events: auto;
 }
 
 
@@ -199,16 +203,23 @@ button {
 .resize-handle {
   position: relative;
   z-index: 3;
+  width: 4px;
   background: transparent;
   cursor: col-resize;
-  border-left: 1px solid var(--ui-border-default);
-  border-right: none;
   transition: background 0.2s;
 }
 
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+}
+
 .resize-handle:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-left-color: var(--ui-border-strong);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .brand {

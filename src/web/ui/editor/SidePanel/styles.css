@@ -3,11 +3,20 @@
   z-index: 20;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
+  width: var(--side-panel, 16rem);
   height: 100%;
-  overflow: hidden;
   border-right: 1px solid var(--ui-border-default);
   background: var(--ui-bg-surface);
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.3);
   animation: panel-slide-in 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.side-panel-inner {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
 }
 
 @keyframes panel-slide-in {

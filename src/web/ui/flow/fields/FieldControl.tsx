@@ -314,20 +314,23 @@ function SelectField({
 }) {
   const exclusive = useExclusiveSelect();
   return (
-    <NodeFieldShell label={label}>
-      <Select value={value} onValueChange={onChange} open={exclusive.open} onOpenChange={exclusive.onOpenChange}>
-        <SelectTrigger className="nodrag ix-select-trigger" size="sm">
-          <SelectValue placeholder="Select..." />
-        </SelectTrigger>
-        <SelectContent className="nodrag" position="popper" sideOffset={4}>
-          {options.map((option) => (
-            <SelectItem key={option} value={option}>
-              {option}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </NodeFieldShell>
+    <Field className="ix-field">
+      <span className="ix-control-shell ix-select-shell">
+        <FieldLabel className="ix-control-label ix-control-label--inline">{label}</FieldLabel>
+        <Select value={value} onValueChange={onChange} open={exclusive.open} onOpenChange={exclusive.onOpenChange}>
+          <SelectTrigger className="nodrag ix-select-trigger" size="sm">
+            <SelectValue placeholder="Select..." />
+          </SelectTrigger>
+          <SelectContent className="nodrag" position="popper" sideOffset={4}>
+            {options.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </span>
+    </Field>
   );
 }
 

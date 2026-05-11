@@ -125,9 +125,8 @@ function compileNode(node: ImageXNode, context: GraphContext, seen: Set<string>,
   switch (node.type) {
     case 'prompt':
     case 'file':
-      return compilePrimitiveNode(node, context, nextSeen, resolvedImages);
     case 'image':
-      return compileImageNode(node, context, nextSeen, resolvedImages);
+      return compilePrimitiveNode(node, context, nextSeen, resolvedImages);
     case 'color':
       return compileColorNode(node);
     case 'color-balance':
@@ -171,6 +170,14 @@ function compilePrimitiveNode(node: ImageXNode, context: GraphContext, seen: Set
       } else if (compiled.length > 1) {
         fieldValue = compiled;
       }
+    } else if (field.kind === 'image') {
+      // Image fields: produce an __imagex_ref marker if the node has an asset
+      const assetUrl = typeof node.data.assetUrl === 'string' ? node.data.assetUrl : '';
+      const assetName = typeof node.data.assetName === 'string' ? node.data.assetName : '';
+      const path = assetUrl || assetName;
+      if (path) {
+        fieldValue = { __imagex_ref: true, path };
+      }
     } else {
       // Use the field's own value
       fieldValue = getFieldValue(node, field);
@@ -192,70 +199,6 @@ function compilePrimitiveNode(node: ImageXNode, context: GraphContext, seen: Set
   }
 
   // Always return as object (consistent structure)
-  return Object.keys(result).length > 0 ? result : null;
-}
-
-function compileImageNode(node: ImageXNode, context: GraphContext, seen: Set<string>, resolvedImages?: ResolvedImages): unknown {
-  const title = typeof node.data.title === 'string' && node.data.title !== 'Image'
-    ? node.data.title
-    : undefined;
-  const assetName = typeof node.data.assetName === 'string' ? node.data.assetName : '';
-  const assetUrl = typeof node.data.assetUrl === 'string' ? node.data.assetUrl : '';
-  const path = assetUrl || assetName;
-  const description = getFieldValue(node, { id: 'description', kind: 'textarea' }) as string || '';
-
-  const builtInFields = getBuiltInFields(node);
-  const dynamicFields = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
-  const allFields = [...builtInFields, ...dynamicFields];
-
-  const result: Record<string, unknown> = {};
-  if (title) result._name = title;
-  if (description) result.description = description;
-
-  // Collect images: if upstream is connected to image socket, use those only.
-  // Otherwise use this node's own image.
-  const imageHandleId = `field:image`;
-  const imageUpstream = getUpstreamForHandle(node.id, imageHandleId, context);
-  const imageEntries: unknown[] = [];
-
-  if (imageUpstream.length > 0) {
-    // Upstream images flowing in - don't include this node's own image
-    for (const up of imageUpstream) {
-      const compiled = compileNode(up, context, new Set(seen), resolvedImages);
-      if (compiled) imageEntries.push(compiled);
-    }
-  } else if (path) {
-    // No upstream - use this node's own image
-    imageEntries.push({ __imagex_ref: true, path });
-  }
-
-  if (imageEntries.length === 1) {
-    result.image = imageEntries[0];
-  } else if (imageEntries.length > 1) {
-    result.image = imageEntries;
-  }
-
-  // Process remaining fields (not the image field)
-  for (const field of allFields) {
-    if (field.id === 'image' || field.id === 'description') continue;
-    const handleId = `field:${field.id}`;
-    const upstream = getUpstreamForHandle(node.id, handleId, context);
-
-    if (upstream.length > 0) {
-      const compiled = upstream.map((up) => compileNode(up, context, new Set(seen), resolvedImages)).filter(Boolean);
-      if (compiled.length === 1) {
-        result[field.label] = compiled[0];
-      } else if (compiled.length > 1) {
-        result[field.label] = compiled;
-      }
-    } else {
-      const value = getFieldValue(node, field);
-      if (value !== undefined && value !== null && value !== '') {
-        result[field.label] = value;
-      }
-    }
-  }
-
   return Object.keys(result).length > 0 ? result : null;
 }
 

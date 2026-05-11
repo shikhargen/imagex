@@ -211,7 +211,7 @@ function CropContent({ node, onChange }: { node: ImageXNode; onChange: (nodeId: 
         <div className="ix-node-fields">
           <div className="ix-primitive-field">
             <Field className="ix-field">
-              <span className="ix-control-shell">
+              <span className="ix-control-shell ix-select-shell">
                 <FieldLabel className="ix-control-label ix-control-label--inline">Aspect Ratio</FieldLabel>
                 <Select
                   value={(node.data.aspectRatio as string) || 'custom'}

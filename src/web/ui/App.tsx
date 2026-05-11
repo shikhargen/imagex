@@ -428,7 +428,7 @@ export function App() {
           rightOpen={rightOpen}
         />
         {activeSidePanel && (
-          <div className="side-panel-overlay" style={{ width: `calc(var(--side-panel, 16rem) + 0.278rem)` }}>
+          <div className="side-panel-overlay">
             <SidePanel onClose={() => setActiveSidePanel(null)}>
               {activeSidePanel === 'workflows' && (
                 <WorkflowsPanel
