@@ -1146,6 +1146,20 @@ export function App() {
     applyWorkflow(removeFrameOnlyFromWorkflow(currentWithLayout, nodeId));
   }
 
+  function disconnectHandle(nodeId: string, handleId: string) {
+    recordEditHistory(`disconnect:${nodeId}:${handleId}`);
+    const nextEdges = edgesRef.current.filter(
+      (edge) => !(edge.target === nodeId && edge.targetHandle === handleId)
+    );
+    edgesRef.current = nextEdges;
+    setEdges(nextEdges);
+    const nextNodes = refreshConnectedTargetHandles(nodesRef.current, nextEdges);
+    nodesRef.current = nextNodes;
+    setNodes(nextNodes);
+    const nextWorkflow = syncLatestWorkflow(nextNodes, nextEdges);
+    if (nextWorkflow) { workflowRef.current = nextWorkflow; setWorkflow(nextWorkflow); }
+  }
+
   function deleteSelection() {
     if (!workflow) return;
     const selectedNodes = expandFrameSelection(new Set(selectedNodeIds()));
@@ -1547,7 +1561,17 @@ export function App() {
         </section>
         {rightOpen && <ResizeHandle side="right" onResize={setRightWidth} min={280} max={520} />}
         {rightOpen ? (
-          <InspectorPanel node={selectedNode} onChange={updateNodeData} outputResults={outputResults} onClose={() => setRightOpen(false)} />
+          <InspectorPanel
+            node={selectedNode}
+            onChange={updateNodeData}
+            outputResults={outputResults}
+            onClose={() => setRightOpen(false)}
+            connectedHandles={nodes.find((n) => n.id === selectedId)?.data.connectedTargetHandles || []}
+            onDisconnect={disconnectHandle}
+            onAddField={addCustomField}
+            onDynamicFieldChange={updateCustomFieldValue}
+            onOpenAssets={openAssetPickerForField}
+          />
         ) : (
           <InspectorToggle onOpen={() => setRightOpen(true)} />
         )}

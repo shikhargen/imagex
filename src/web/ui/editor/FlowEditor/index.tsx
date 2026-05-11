@@ -217,6 +217,7 @@ export function FlowEditor({
         }}
         edgesReconnectable
         reconnectRadius={16}
+        connectionRadius={40}
         isValidConnection={(connection) => isCompatibleConnection(connection, nodes.map((node) => node.data.workflowNode), edges)}
         onNodeClick={(_, node) => {
           if (placingNodeId) {
