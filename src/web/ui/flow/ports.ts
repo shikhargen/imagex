@@ -29,6 +29,15 @@ export const inputPorts: Record<NodeType, NodePort[]> = {
   'rotate-flip': [
     { id: 'image-in', label: 'Image', kind: 'image', accepts: ['image', 'result'] },
   ],
+  crop: [
+    { id: 'image-in', label: 'Image', kind: 'image', accepts: ['image', 'result'] },
+  ],
+  blur: [
+    { id: 'image-in', label: 'Image', kind: 'image', accepts: ['image', 'result'] },
+  ],
+  download: [
+    { id: 'image-in', label: 'Image', kind: 'image', accepts: ['image', 'result'] },
+  ],
   frame: [],
 };
 
@@ -40,6 +49,9 @@ export const outputPorts: Record<NodeType, NodePort[]> = {
   'codex-output': [{ id: 'result-out', label: 'Image', kind: 'result' }],
   'color-balance': [{ id: 'image-out', label: 'Image', kind: 'image' }],
   'rotate-flip': [{ id: 'image-out', label: 'Image', kind: 'image' }],
+  crop: [{ id: 'image-out', label: 'Image', kind: 'image' }],
+  blur: [{ id: 'image-out', label: 'Image', kind: 'image' }],
+  download: [],
   frame: [],
 };
 

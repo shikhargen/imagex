@@ -16,6 +16,10 @@ export type NodeType =
   // Image Editing (fixed controls + preview)
   | 'color-balance' // RGB/HSL sliders on an image
   | 'rotate-flip'   // rotation + flip toggles
+  | 'crop'          // crop with interactive handles
+  | 'blur'          // gaussian blur
+  // Utility
+  | 'download'      // download processed image
   // Layout
   | 'frame';        // grouping container (no ports)
 

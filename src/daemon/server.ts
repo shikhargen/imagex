@@ -4,6 +4,7 @@ import { access, readFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 
 function log(scope: string, message: string, extra?: Record<string, unknown>): void {
   const ts = new Date().toISOString();
@@ -320,6 +321,113 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     return resolved;
   }
 
+  /**
+   * Apply image editing transforms (rotate, flip, color balance) to resolved references.
+   * Traces the workflow graph to find editing nodes between image sources and the output node.
+   */
+  async function applyImageEdits(
+    references: Array<{ name: string; role: string; notes: string; position: string; dataUrl: string }>,
+    workflow: ImageXWorkflow,
+    outputNodeId: string
+  ): Promise<Array<{ name: string; role: string; notes: string; position: string; dataUrl: string }>> {
+    // Build a map of which editing nodes affect which image paths
+    const nodesById = new Map(workflow.nodes.map((n) => [n.id, n]));
+
+    // For each reference, trace backwards from outputNode to find editing nodes in its path
+    const result: Array<{ name: string; role: string; notes: string; position: string; dataUrl: string }> = [];
+
+    for (const ref of references) {
+      // Find the source node for this reference (by matching its path/name)
+      const editingNodes = findEditingNodesForRef(ref.name, workflow, outputNodeId, nodesById);
+
+      if (editingNodes.length === 0) {
+        result.push(ref);
+        continue;
+      }
+
+      // Apply transforms in order (from source towards output)
+      let imageBuffer = Buffer.from(ref.dataUrl.split(',')[1] || '', 'base64');
+      let pipeline = sharp(imageBuffer);
+
+      for (const editNode of editingNodes) {
+        if (editNode.type === 'rotate-flip') {
+          const rotate = ((Number(editNode.data.rotate) || 0) % 360 + 360) % 360;
+          const flipH = Boolean(editNode.data.flipH);
+          const flipV = Boolean(editNode.data.flipV);
+          if (rotate !== 0) pipeline = pipeline.rotate(rotate);
+          if (flipH) pipeline = pipeline.flop();
+          if (flipV) pipeline = pipeline.flip();
+        } else if (editNode.type === 'color-balance') {
+          const red = Number(editNode.data.red) || 0;
+          const green = Number(editNode.data.green) || 0;
+          const blue = Number(editNode.data.blue) || 0;
+          if (red !== 0 || green !== 0 || blue !== 0) {
+            // Apply color shift using linear transform
+            pipeline = pipeline.linear(
+              [1 + red / 100, 1 + green / 100, 1 + blue / 100],
+              [0, 0, 0]
+            );
+          }
+        }
+      }
+
+      const outputBuffer = await pipeline.png().toBuffer();
+      const dataUrl = `data:image/png;base64,${outputBuffer.toString('base64')}`;
+      result.push({ ...ref, dataUrl });
+    }
+
+    return result;
+  }
+
+  /**
+   * Find editing nodes (rotate-flip, color-balance) in the path between an image source and the output node.
+   */
+  function findEditingNodesForRef(
+    refName: string,
+    workflow: ImageXWorkflow,
+    outputNodeId: string,
+    nodesById: Map<string, ImageXNode>
+  ): ImageXNode[] {
+    // Trace from outputNode backwards to find the path that includes this reference
+    // Collect editing nodes along the way
+    const editingNodes: ImageXNode[] = [];
+
+    function traceBack(nodeId: string, visited: Set<string>): boolean {
+      if (visited.has(nodeId)) return false;
+      visited.add(nodeId);
+
+      const node = nodesById.get(nodeId);
+      if (!node) return false;
+
+      // Check if this node is the image source matching our reference
+      if (node.type === 'image') {
+        const assetUrl = typeof node.data.assetUrl === 'string' ? node.data.assetUrl : '';
+        const assetName = typeof node.data.assetName === 'string' ? node.data.assetName : '';
+        if (refName === assetUrl || refName === assetName || refName === node.id) {
+          return true;
+        }
+      }
+
+      // Trace upstream
+      for (const edge of workflow.edges) {
+        if (edge.target !== nodeId) continue;
+        const found = traceBack(edge.source, visited);
+        if (found) {
+          // This node is on the path - if it's an editing node, collect it
+          if (node.type === 'rotate-flip' || node.type === 'color-balance') {
+            editingNodes.unshift(node); // unshift to maintain source-to-output order
+          }
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    traceBack(outputNodeId, new Set());
+    return editingNodes;
+  }
+
   app.post('/api/projects/:projectId/compile', async (req: Request<{ projectId: string }, unknown, GenerateWorkflowRequest & { outputNodeId?: string }>, res, next) => {
     try {
       await getProject(req.params.projectId);
@@ -523,7 +631,9 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
       const upstreamIds = dependencies.get(outputNodeId) || new Set();
       if (projectId) {
         const resolved = await resolveImageReferences(projectId, options.references, results);
-        options.references = resolved;
+        // Apply image editing transforms (rotate/flip/color-balance) to resolved references
+        const transformed = await applyImageEdits(resolved, workflow, outputNodeId);
+        options.references = transformed;
         log('executor', 'resolved image references', { outputNodeId, resolved: resolved.length });
       }
 

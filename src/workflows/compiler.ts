@@ -5,11 +5,14 @@ type CompiledWorkflow = {
   options: ImageGenerationOptions;
 };
 
-export function compileWorkflow(workflow: ImageXWorkflow): CompiledWorkflow {
+/** Map of nodeId → resolved image URL (from GraphEngine pre-processing) */
+export type ResolvedImages = Map<string, string>;
+
+export function compileWorkflow(workflow: ImageXWorkflow, resolvedImages?: ResolvedImages): CompiledWorkflow {
   const outputs = workflow.nodes.filter((node) => node.type === 'codex-output');
   const context = graphContext(workflow);
 
-  const compiledOutputs = outputs.map((output) => compileCodexOutput(output, context)).filter(isMeaningfulObject);
+  const compiledOutputs = outputs.map((output) => compileCodexOutput(output, context, resolvedImages)).filter(isMeaningfulObject);
 
   const rawPrompt = {
     useCase: workflow.settings.useCase || 'stylized-concept',
@@ -31,12 +34,12 @@ export function compileWorkflow(workflow: ImageXWorkflow): CompiledWorkflow {
   };
 }
 
-export function compileOutputNodeWorkflow(workflow: ImageXWorkflow, nodeId: string): CompiledWorkflow | null {
+export function compileOutputNodeWorkflow(workflow: ImageXWorkflow, nodeId: string, resolvedImages?: ResolvedImages): CompiledWorkflow | null {
   const context = graphContext(workflow);
   const output = context.nodesById.get(nodeId);
   if (!output || output.type !== 'codex-output') return null;
 
-  const compiled = compileCodexOutput(output, context);
+  const compiled = compileCodexOutput(output, context, resolvedImages);
   if (!isMeaningfulObject(compiled)) return null;
 
   const rawPrompt = {
@@ -108,30 +111,41 @@ function getAllUpstream(nodeId: string, context: GraphContext): ImageXNode[] {
  * For image fields: value is "__imagex_image_ref" marker that gets post-processed
  * into [image-N] position references.
  */
-function compileNode(node: ImageXNode, context: GraphContext, seen: Set<string>): unknown {
+function compileNode(node: ImageXNode, context: GraphContext, seen: Set<string>, resolvedImages?: ResolvedImages): unknown {
   if (seen.has(node.id)) return null;
   const nextSeen = new Set(seen);
   nextSeen.add(node.id);
 
+  // If this node has a pre-processed image from GraphEngine, use it directly
+  if (resolvedImages?.has(node.id)) {
+    const resolvedUrl = resolvedImages.get(node.id)!;
+    return { image: { __imagex_ref: true, path: resolvedUrl } };
+  }
+
   switch (node.type) {
     case 'prompt':
     case 'file':
-      return compilePrimitiveNode(node, context, nextSeen);
+      return compilePrimitiveNode(node, context, nextSeen, resolvedImages);
     case 'image':
-      return compileImageNode(node, context, nextSeen);
+      return compileImageNode(node, context, nextSeen, resolvedImages);
     case 'color':
       return compileColorNode(node);
     case 'color-balance':
     case 'rotate-flip':
+    case 'crop':
+    case 'blur':
+      // Editing nodes: if resolvedImages didn't catch it above, pass through source
+      return compilePassthroughEditNode(node, context, nextSeen, resolvedImages);
+    case 'download':
+      return null;
     case 'frame':
       return null;
     case 'codex-output':
-      // When an output node's result is connected downstream, it acts as an image reference
       return { image: { __imagex_ref: true, path: `__output:${node.id}` } };
   }
 }
 
-function compilePrimitiveNode(node: ImageXNode, context: GraphContext, seen: Set<string>): unknown {
+function compilePrimitiveNode(node: ImageXNode, context: GraphContext, seen: Set<string>, resolvedImages?: ResolvedImages): unknown {
   const title = typeof node.data.title === 'string' && node.data.title !== nodeMeta(node.type)
     ? node.data.title
     : undefined;
@@ -148,33 +162,40 @@ function compilePrimitiveNode(node: ImageXNode, context: GraphContext, seen: Set
     const handleId = `field:${field.id}`;
     const upstream = getUpstreamForHandle(node.id, handleId, context);
 
+    let fieldValue: unknown;
     if (upstream.length > 0) {
       // This field has connections flowing in - compile those nodes
-      const compiled = upstream.map((up) => compileNode(up, context, new Set(seen))).filter(Boolean);
+      const compiled = upstream.map((up) => compileNode(up, context, new Set(seen), resolvedImages)).filter(Boolean);
       if (compiled.length === 1) {
-        result[field.label] = compiled[0];
+        fieldValue = compiled[0];
       } else if (compiled.length > 1) {
-        result[field.label] = compiled;
+        fieldValue = compiled;
       }
     } else {
       // Use the field's own value
-      const value = getFieldValue(node, field);
-      if (value !== undefined && value !== null && value !== '') {
-        result[field.label] = value;
+      fieldValue = getFieldValue(node, field);
+    }
+
+    if (fieldValue === undefined || fieldValue === null || fieldValue === '') continue;
+
+    // Handle duplicate keys by converting to array
+    if (result[field.label] !== undefined) {
+      const existing = result[field.label];
+      if (Array.isArray(existing)) {
+        existing.push(fieldValue);
+      } else {
+        result[field.label] = [existing, fieldValue];
       }
+    } else {
+      result[field.label] = fieldValue;
     }
   }
 
-  // If only one field and no name, just return the value directly
-  const keys = Object.keys(result).filter((k) => k !== '_name');
-  if (keys.length === 1 && !title) {
-    return result[keys[0]!];
-  }
-
+  // Always return as object (consistent structure)
   return Object.keys(result).length > 0 ? result : null;
 }
 
-function compileImageNode(node: ImageXNode, context: GraphContext, seen: Set<string>): unknown {
+function compileImageNode(node: ImageXNode, context: GraphContext, seen: Set<string>, resolvedImages?: ResolvedImages): unknown {
   const title = typeof node.data.title === 'string' && node.data.title !== 'Image'
     ? node.data.title
     : undefined;
@@ -200,7 +221,7 @@ function compileImageNode(node: ImageXNode, context: GraphContext, seen: Set<str
   if (imageUpstream.length > 0) {
     // Upstream images flowing in - don't include this node's own image
     for (const up of imageUpstream) {
-      const compiled = compileNode(up, context, new Set(seen));
+      const compiled = compileNode(up, context, new Set(seen), resolvedImages);
       if (compiled) imageEntries.push(compiled);
     }
   } else if (path) {
@@ -221,7 +242,7 @@ function compileImageNode(node: ImageXNode, context: GraphContext, seen: Set<str
     const upstream = getUpstreamForHandle(node.id, handleId, context);
 
     if (upstream.length > 0) {
-      const compiled = upstream.map((up) => compileNode(up, context, new Set(seen))).filter(Boolean);
+      const compiled = upstream.map((up) => compileNode(up, context, new Set(seen), resolvedImages)).filter(Boolean);
       if (compiled.length === 1) {
         result[field.label] = compiled[0];
       } else if (compiled.length > 1) {
@@ -243,15 +264,47 @@ function compileColorNode(node: ImageXNode): unknown {
   return { color };
 }
 
+function compileRotateFlipNode(node: ImageXNode, context: GraphContext, seen: Set<string>, resolvedImages?: ResolvedImages): unknown {
+  // Pass through the source image as-is (transforms applied during processing, not in prompt)
+  const upstream = getAllUpstream(node.id, context);
+  for (const up of upstream) {
+    if (seen.has(up.id)) continue;
+    const compiled = compileNode(up, context, new Set(seen), resolvedImages);
+    if (compiled) return compiled;
+  }
+  return null;
+}
+
+function compilePassthroughEditNode(node: ImageXNode, context: GraphContext, seen: Set<string>, resolvedImages?: ResolvedImages): unknown {
+  const upstream = getAllUpstream(node.id, context);
+  for (const up of upstream) {
+    if (seen.has(up.id)) continue;
+    const compiled = compileNode(up, context, new Set(seen), resolvedImages);
+    if (compiled) return compiled;
+  }
+  return null;
+}
+
+function compileColorBalanceNode(node: ImageXNode, context: GraphContext, seen: Set<string>, resolvedImages?: ResolvedImages): unknown {
+  // Pass through the source image as-is (adjustments applied during processing, not in prompt)
+  const upstream = getAllUpstream(node.id, context);
+  for (const up of upstream) {
+    if (seen.has(up.id)) continue;
+    const compiled = compileNode(up, context, new Set(seen), resolvedImages);
+    if (compiled) return compiled;
+  }
+  return null;
+}
+
 // ─── Codex Output Compilation ────────────────────────────────────────────────
 
-function compileCodexOutput(output: ImageXNode, context: GraphContext): Record<string, unknown> {
+function compileCodexOutput(output: ImageXNode, context: GraphContext, resolvedImages?: ResolvedImages): Record<string, unknown> {
   const baseSeen = new Set<string>([output.id]);
   const upstream = getAllUpstream(output.id, context);
 
   const inputs: unknown[] = [];
   for (const node of upstream) {
-    const compiled = compileNode(node, context, new Set(baseSeen));
+    const compiled = compileNode(node, context, new Set(baseSeen), resolvedImages);
     if (compiled) inputs.push(compiled);
   }
 

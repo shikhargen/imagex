@@ -16,21 +16,26 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import './styles.css';
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { NodeType } from '../../../../shared/types.js';
 import { nodeMeta } from '../../flow/meta.js';
+import { flowStore, useFlowNodes, useFlowEdges } from '../../../state/flowStore.js';
 import { isCompatibleConnection, portLabel } from '../../flow/ports.js';
 import type { UiEdge, UiNode } from '../../flow/types.js';
 import {
+  BlurNode,
   CodexOutputNode,
   ColorBalanceNode,
   ColorNode,
+  CropNode,
+  DownloadNode,
   FileNode,
   FrameNode,
   ImageNode,
   PromptNode,
   RotateFlipNode,
 } from '../../flow/nodes/ImageXNode.js';
+import { graphEngine } from '../../../state/graphEngine.js';
 
 const nodeTypes = {
   prompt: PromptNode,
@@ -40,14 +45,13 @@ const nodeTypes = {
   'codex-output': CodexOutputNode,
   'color-balance': ColorBalanceNode,
   'rotate-flip': RotateFlipNode,
+  crop: CropNode,
+  blur: BlurNode,
+  download: DownloadNode,
   frame: FrameNode,
 };
 
 export function FlowEditor({
-  nodes,
-  edges,
-  onNodesChange,
-  onEdgesChange,
   onSelectNode,
   onNodeMenu,
   onBeforeChange,
@@ -65,10 +69,6 @@ export function FlowEditor({
   onPlacingDrop,
   showMinimap,
 }: {
-  nodes: UiNode[];
-  edges: UiEdge[];
-  onNodesChange: (nodes: UiNode[]) => void;
-  onEdgesChange: (edges: UiEdge[]) => void;
   onSelectNode: (nodeId: string | null) => void;
   onNodeMenu: (nodeId: string, position: { x: number; y: number }) => void;
   onBeforeChange: () => void;
@@ -91,43 +91,81 @@ export function FlowEditor({
   onPlacingDrop?: () => void;
   showMinimap?: boolean;
 }) {
+  // Read nodes/edges from FlowStore (not props) — avoids parent re-render cascades
+  const nodes = useFlowNodes();
+  const edges = useFlowEdges();
+
+  // Keep GraphEngine in sync with the current graph topology
+  useEffect(() => {
+    const workflowNodes = nodes.map((n) => n.data.workflowNode);
+    const workflowEdges = edges.map((e) => {
+      const edge: import('../../../../shared/types.js').ImageXEdge = {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+      };
+      if (e.sourceHandle != null) edge.sourceHandle = e.sourceHandle;
+      if (e.targetHandle != null) edge.targetHandle = e.targetHandle;
+      return edge;
+    });
+    graphEngine.setGraph(workflowNodes, workflowEdges);
+  }, [nodes, edges]);
+
   const edgeReconnectSuccessful = useRef(true);
   const frameDragRef = useRef<{ id: string; position: { x: number; y: number } } | null>(null);
   const reactFlowRef = useRef<ReactFlowInstance<UiNode, UiEdge> | null>(null);
+
+  // Stable change handlers — write to flowStore only (App subscribes via flowStore)
   const handleNodesChange = useCallback(
-    (changes: NodeChange<UiNode>[]) => onNodesChange(applyNodeChanges(changes, nodes)),
-    [nodes, onNodesChange]
+    (changes: NodeChange<UiNode>[]) => {
+      // Filter: skip position and dimension changes during drag (ReactFlow handles visually)
+      // Only process selection and removal changes immediately
+      const meaningful = changes.filter((c) => c.type === 'select' || c.type === 'remove');
+      if (meaningful.length === 0) return;
+      const current = flowStore.getNodes();
+      const next = applyNodeChanges(meaningful, current);
+      flowStore.setNodes(next);
+    },
+    []
   );
   const handleEdgesChange = useCallback(
-    (changes: EdgeChange<UiEdge>[]) => onEdgesChange(applyEdgeChanges(changes, edges)),
-    [edges, onEdgesChange]
+    (changes: EdgeChange<UiEdge>[]) => {
+      const current = flowStore.getEdges();
+      const next = applyEdgeChanges(changes, current);
+      flowStore.setEdges(next);
+    },
+    []
   );
   const handleConnect = useCallback(
     (connection: Connection) => {
-      if (!isCompatibleConnection(connection, nodes.map((node) => node.data.workflowNode), edges)) return;
+      const currentNodes = flowStore.getNodes();
+      const currentEdges = flowStore.getEdges();
+      if (!isCompatibleConnection(connection, currentNodes.map((node) => node.data.workflowNode), currentEdges)) return;
       onBeforeChange();
-      const source = nodes.find((node) => node.id === connection.source);
-      const target = nodes.find((node) => node.id === connection.target);
-      onEdgesChange(addEdge(styleConnection(connection, source, target), edges));
+      const source = currentNodes.find((node) => node.id === connection.source);
+      const target = currentNodes.find((node) => node.id === connection.target);
+      const nextEdges = addEdge(styleConnection(connection, source, target), currentEdges);
+      flowStore.setEdges(nextEdges);
     },
-    [edges, nodes, onBeforeChange, onEdgesChange]
+    [onBeforeChange]
   );
 
   const handleReconnect = useCallback(
     (oldEdge: UiEdge, newConnection: Connection) => {
       if (!newConnection.target || !newConnection.targetHandle) return;
-      if (!isCompatibleConnection(newConnection, nodes.map((node) => node.data.workflowNode), edges)) return;
+      const currentNodes = flowStore.getNodes();
+      const currentEdges = flowStore.getEdges();
+      if (!isCompatibleConnection(newConnection, currentNodes.map((node) => node.data.workflowNode), currentEdges)) return;
       onBeforeChange();
       edgeReconnectSuccessful.current = true;
-      const source = nodes.find((node) => node.id === newConnection.source);
-      const target = nodes.find((node) => node.id === newConnection.target);
-      onEdgesChange(
-        edges.map((edge) =>
-          edge.id === oldEdge.id ? { ...styleConnection(newConnection, source, target), id: oldEdge.id } : edge
-        )
+      const source = currentNodes.find((node) => node.id === newConnection.source);
+      const target = currentNodes.find((node) => node.id === newConnection.target);
+      const nextEdges = currentEdges.map((edge) =>
+        edge.id === oldEdge.id ? { ...styleConnection(newConnection, source, target), id: oldEdge.id } : edge
       );
+      flowStore.setEdges(nextEdges);
     },
-    [edges, nodes, onBeforeChange, onEdgesChange]
+    [onBeforeChange]
   );
   const handleReconnectStart = useCallback(() => {
     edgeReconnectSuccessful.current = false;
@@ -136,11 +174,12 @@ export function FlowEditor({
     (_: MouseEvent | TouchEvent, edge: UiEdge) => {
       if (!edgeReconnectSuccessful.current) {
         onBeforeChange();
-        onEdgesChange(edges.filter((candidate) => candidate.id !== edge.id));
+        const nextEdges = flowStore.getEdges().filter((candidate) => candidate.id !== edge.id);
+        flowStore.setEdges(nextEdges);
       }
       edgeReconnectSuccessful.current = true;
     },
-    [edges, onBeforeChange, onEdgesChange]
+    [onBeforeChange]
   );
 
   const memoizedEdgeOptions = useMemo(
@@ -207,7 +246,15 @@ export function FlowEditor({
           if (delta.x || delta.y) onFrameDrag(node.id, delta);
           frameDragRef.current = { id: node.id, position: node.position };
         }}
-        onNodeDragStop={(_, node) => {
+        onNodeDragStop={(_, node, nodes) => {
+          // Persist final positions to flowStore (we skipped position changes during drag)
+          const currentNodes = flowStore.getNodes();
+          const updatedNodes = currentNodes.map((n) => {
+            const rfNode = nodes.find((rf) => rf.id === n.id);
+            return rfNode ? { ...n, position: rfNode.position } : n;
+          });
+          flowStore.setNodes(updatedNodes);
+
           frameDragRef.current = null;
           if (node.type !== 'frame') {
             onNodeDragStopCheckFrames(node.id);
@@ -218,7 +265,7 @@ export function FlowEditor({
         edgesReconnectable
         reconnectRadius={16}
         connectionRadius={40}
-        isValidConnection={(connection) => isCompatibleConnection(connection, nodes.map((node) => node.data.workflowNode), edges)}
+        isValidConnection={(connection) => isCompatibleConnection(connection, flowStore.getNodes().map((node) => node.data.workflowNode), flowStore.getEdges())}
         onNodeClick={(_, node) => {
           if (placingNodeId) {
             onPlacingDrop?.();
@@ -253,7 +300,8 @@ export function FlowEditor({
         }
         onEdgeDoubleClick={(_, edge) => {
           onBeforeChange();
-          onEdgesChange(edges.filter((candidate) => candidate.id !== edge.id));
+          const nextEdges = flowStore.getEdges().filter((candidate) => candidate.id !== edge.id);
+          flowStore.setEdges(nextEdges);
         }}
         onPaneClick={() => {
           if (placingNodeId) {

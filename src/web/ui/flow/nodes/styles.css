@@ -955,3 +955,137 @@
   font-size: 0.75rem !important;
   letter-spacing: 0.02em;
 }
+
+/* ─── Rotate/Flip Edit Node ───────────────────────────────────────────────── */
+
+.ix-edit-preview {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.5rem 0.625rem;
+  border-radius: var(--ui-radius-md);
+  border: 1px solid var(--ui-border-subtle);
+  overflow: hidden;
+}
+
+.ix-edit-preview img {
+  width: 100%;
+  height: auto;
+  display: block;
+  transition: transform 0.25s ease;
+}
+
+.ix-edit-preview-empty {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ui-text-dim);
+  font-size: 0.6875rem;
+}
+
+.ix-edit-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.625rem;
+}
+
+.ix-edit-controls button {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-md);
+  background: transparent;
+  color: var(--ui-text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.ix-edit-controls button:hover {
+  background: var(--ui-bg-hover);
+  color: var(--ui-text-primary);
+  border-color: var(--ui-border-default);
+}
+
+.ix-edit-controls button.active {
+  background: var(--ui-bg-active);
+  color: var(--node-accent);
+  border-color: var(--node-accent);
+}
+
+.ix-edit-controls-spacer {
+  flex: 1;
+}
+
+.ix-edit-reset {
+  width: auto !important;
+  padding: 0 0.5rem !important;
+  font-size: 0.625rem;
+  font-weight: 500;
+}
+
+.ix-download-action {
+  padding: 0.5rem 0.625rem;
+}
+
+.ix-download-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--node-accent);
+  border-radius: var(--ui-radius-md);
+  background: transparent;
+  color: var(--node-accent);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ix-download-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--node-accent) 15%, transparent);
+}
+
+.ix-download-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Canvas preview element */
+.ix-canvas-preview {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: var(--ui-radius-sm);
+}
+
+/* Crop container */
+.ix-crop-container {
+  position: relative;
+  margin: 0.5rem 0.625rem;
+}
+
+.ix-crop-area {
+  position: absolute;
+  inset: 0;
+}
+
+/* Crop controls */
+.ix-crop-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem 0.625rem;
+}
+
+.ix-crop-controls [data-slot="select-trigger"] {
+  width: 100%;
+}

@@ -36,6 +36,7 @@ export function FieldControl({
   field,
   value,
   onChange,
+  onCommit,
   assetPreviewUrl,
   assetDisplayName,
   onOpenAssets,
@@ -45,6 +46,8 @@ export function FieldControl({
   field: CustomFieldDefinition;
   value: unknown;
   onChange: (value: unknown) => void;
+  /** Called on pointer-up for sliders (ongoing=false trigger) */
+  onCommit?: ((value: unknown) => void) | undefined;
   assetPreviewUrl?: string | undefined;
   assetDisplayName?: string | undefined;
   onOpenAssets?: (() => void) | undefined;
@@ -158,6 +161,7 @@ export function FieldControl({
               step={step}
               value={[Number(value) || min]}
               onValueChange={(nextValue) => onChange(nextValue[0] ?? min)}
+              {...(onCommit ? { onValueCommit: (nextValue: number[]) => onCommit(nextValue[0] ?? min) } : {})}
             />
             <span className="ix-slider-value">{stringValue || String(min)}</span>
           </div>

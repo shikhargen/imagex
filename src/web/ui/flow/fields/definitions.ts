@@ -31,6 +31,16 @@ export const builtInFieldDefinitions: Record<NodeType, CustomFieldDefinition[]> 
     { id: 'flipH', label: 'Flip Horizontal', kind: 'toggle', value: false },
     { id: 'flipV', label: 'Flip Vertical', kind: 'toggle', value: false },
   ],
+  crop: [
+    { id: 'x', label: 'X', kind: 'number', value: 0 },
+    { id: 'y', label: 'Y', kind: 'number', value: 0 },
+    { id: 'cropWidth', label: 'Width', kind: 'number', value: 0 },
+    { id: 'cropHeight', label: 'Height', kind: 'number', value: 0 },
+  ],
+  blur: [
+    { id: 'radius', label: 'Radius', kind: 'slider', value: 0, min: 0, max: 20, step: 1 },
+  ],
+  download: [],
   frame: [],
 };
 

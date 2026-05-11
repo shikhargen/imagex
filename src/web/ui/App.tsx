@@ -1,13 +1,9 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from 'react';
+import { Fragment, useEffect, useRef, useState, type ComponentType, type CSSProperties } from 'react';
 import { Box, Component, FileText, Frame, Image, Layers3, MapPin, Palette, X } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { setPreviewResolution } from './flow/imaging/index.js';
 import type {
-  CustomFieldDefinition,
-  CustomFieldKind,
-  GenerateWorkflowResponse,
   ImageXAsset,
-  ImageXEdge,
-  ImageXNode,
-  ImageXNodeAsset,
   ImageXProject,
   ImageXProjectSummary,
   ImageXTemplateSummary,
@@ -26,30 +22,10 @@ import { Sidebar } from './editor/Sidebar/index.js';
 import { SidePanel } from './editor/SidePanel/index.js';
 import { TopBar } from './editor/TopBar/index.js';
 import { WorkflowsPanel } from './editor/WorkflowsPanel/index.js';
-import { createUiWorkflowNode, syncFlowToWorkflow, workflowToFlow } from './flow/adapters.js';
-import { nodeMeta } from './flow/meta.js';
-import type { UiEdge, UiNode } from './flow/types.js';
-import {
-  attachNodeToFrameAtCenter,
-  cloneWorkflow,
-  cloneWorkflowNode,
-  deleteNodes as deleteWorkflowNodes,
-  detachNodesFromFrames,
-  disconnectNodes,
-  duplicateWorkflowNodes,
-  expandSelectionWithFrameMembers,
-  frameMembers,
-  hoveredFrameForNodeCenter,
-  moveFrameMembers,
-  refreshConnectedTargetHandles,
-  removeFrameOnly as removeFrameOnlyFromWorkflow,
-  selectedEdgeIds as graphSelectedEdgeIds,
-  selectedNodeIds as graphSelectedNodeIds,
-  setHighlightedFrame,
-  snapshotsEqual,
-  updateNodeWorkflowData,
-  wrapFramesAroundMembers,
-} from './graph/operations.js';
+import { useEditorActions } from './editor/useEditorActions.js';
+import { useProjectActions } from './editor/useProjectActions.js';
+import type { AuthStatus, ConfirmDialogState, FloatingMenu, TextDialogState } from './editor/types.js';
+import { projectIdFromPath, pushProjectRoute } from './utils/routing.js';
 import { editorShortcuts } from './shortcuts/registry.js';
 import { useShortcuts } from './shortcuts/useShortcuts.js';
 import { Button } from '@/components/ui/button';
@@ -57,54 +33,20 @@ import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 
-type AuthStatus = {
-  authenticated: boolean;
-  provider: 'openai-codex';
-  accountId?: string;
-};
-
-type EditorSnapshot = {
-  workflow: ImageXWorkflow;
-  selectedId: string | null;
-};
-
-type FloatingMenu =
-  | { type: 'node'; nodeId: string; x: number; y: number }
-  | { type: 'selection'; x: number; y: number }
-  | { type: 'pane'; x: number; y: number; flowX: number; flowY: number }
-  | { type: 'workflow'; workflowId: string; x: number; y: number }
-  | { type: 'project'; projectId: string; x: number; y: number }
-  | { type: 'asset'; assetId: string; x: number; y: number }
-  | null;
-
-type TextDialogState =
-  | { type: 'rename-asset'; id: string; title: string; label: string; initialValue: string }
-  | { type: 'rename-workflow'; id: string; title: string; label: string; initialValue: string }
-  | { type: 'rename-project'; id: string; title: string; label: string; initialValue: string }
-  | { type: 'create-node-asset'; id: string; title: string; label: string; initialValue: string }
-  | null;
-
-type ConfirmDialogState =
-  | { type: 'delete-project'; id: string; title: string; message: string; confirmLabel: string }
-  | null;
+// ─── App ─────────────────────────────────────────────────────────────────────
 
 export function App() {
+  // ─── Top-level state ─────────────────────────────────────────────────────────
+
   const [auth, setAuth] = useState<AuthStatus | null>(null);
-  const [projects, setProjects] = useState<ImageXProjectSummary[]>([]);
-  const [templates, setTemplates] = useState<ImageXTemplateSummary[]>([]);
   const [project, setProject] = useState<ImageXProject | null>(null);
   const [workflow, setWorkflow] = useState<ImageXWorkflow | null>(null);
-  const [nodes, setNodes] = useState<UiNode[]>([]);
-  const [edges, setEdges] = useState<UiEdge[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState('Loading workspace...');
   const [outputResults, setOutputResults] = useState<Map<string, OutputNodeResult>>(new Map());
+  const [notification, setNotification] = useState<string | null>(null);
   const [menu, setMenu] = useState<FloatingMenu>(null);
   const [promptOverlay, setPromptOverlay] = useState<{ prompt: string } | null>(null);
-  const [assets, setAssets] = useState<ImageXAsset[]>([]);
-  const [nodeAssets, setNodeAssets] = useState<ImageXNodeAsset[]>([]);
   const [assetPicker, setAssetPicker] = useState<{ nodeId: string; fieldId: string } | null>(null);
-  const [notification, setNotification] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -112,43 +54,89 @@ export function App() {
   const [textDialog, setTextDialog] = useState<TextDialogState>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem('imagex.fontScale')) || 1);
-  const [historyLimit, setHistoryLimit] = useState(() => clampHistoryLimit(Number(localStorage.getItem('imagex.historyLimit')) || 50));
-  const [historyVersion, setHistoryVersion] = useState(0);
   const [rightWidth, setRightWidth] = useState(() => Number(localStorage.getItem('imagex.rightWidth')) || 340);
   const [rightOpen, setRightOpen] = useState(() => localStorage.getItem('imagex.rightOpen') !== 'false');
   const [activeSidePanel, setActiveSidePanel] = useState<string | null>(null);
   const [sidePanelWidth, setSidePanelWidth] = useState(() => Number(localStorage.getItem('imagex.sidePanelWidth')) || 260);
   const [workflowSearchQuery, setWorkflowSearchQuery] = useState('');
-  const [activeCustomField, setActiveCustomField] = useState<{ nodeId: string; fieldId: string } | null>(null);
-  const activeCustomFieldRef = useRef<{ nodeId: string; fieldId: string } | null>(null);
+
   const notificationTimer = useRef<number | null>(null);
   const bootstrapped = useRef(false);
-  const projectRef = useRef<ImageXProject | null>(null);
-  const workflowRef = useRef<ImageXWorkflow | null>(null);
-  const nodesRef = useRef<UiNode[]>([]);
-  const edgesRef = useRef<UiEdge[]>([]);
-  const selectedIdRef = useRef<string | null>(null);
-  const historyLimitRef = useRef(historyLimit);
-  const undoStackRef = useRef<EditorSnapshot[]>([]);
-  const redoStackRef = useRef<EditorSnapshot[]>([]);
-  const isRestoringHistory = useRef(false);
-  const activeEditHistoryKeyRef = useRef<string | null>(null);
-  const activeEditHistoryTimerRef = useRef<number | null>(null);
-  const frameWrapRafRef = useRef<number | null>(null);
-  const [placingNodeId, setPlacingNodeId] = useState<string | null>(null);
-  const placingNodeIdRef = useRef<string | null>(null);
-  const placingNodeOffsetsRef = useRef<Array<{ id: string; dx: number; dy: number }>>([]);
-  const flowApiRef = useRef<{
-    screenToFlowPosition: (p: { x: number; y: number }) => { x: number; y: number };
-    zoomIn: () => void;
-    zoomOut: () => void;
-    fitView: () => void;
-  } | null>(null);
-  const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // ─── Notification helper ───────────────────────────────────────────────────
+
+  function showNotification(message: string) {
+    setNotification(message);
+    if (notificationTimer.current) window.clearTimeout(notificationTimer.current);
+    notificationTimer.current = window.setTimeout(() => setNotification(null), 3800);
+  }
+
+  // ─── Hooks ─────────────────────────────────────────────────────────────────
+
+  const editor = useEditorActions({
+    workflow,
+    setWorkflow,
+    project,
+    setStatus,
+    showNotification,
+    setOutputResults,
+    setAssetPicker,
+    setActiveSidePanel,
+    setPromptOverlay,
+    onNodeMenu: (nodeId, position) => setMenu({ type: 'node', nodeId, x: position.x, y: position.y }),
+  });
+
+  const projectActions = useProjectActions({
+    project,
+    setProject,
+    workflow,
+    setStatus,
+    showNotification,
+    loadWorkflow: editor.restoreWorkflowSnapshot,
+    clearHistory: editor.clearHistory,
+    recordHistory: editor.recordHistory,
+    syncLatestWorkflow: editor.commitFlowToWorkflow,
+    nodesRef: editor.nodesRef,
+    edgesRef: editor.edgesRef,
+    setTextDialog,
+    setConfirmDialog,
+    setShowNewProject,
+    setActiveSidePanel,
+    setOutputResults,
+  });
+
+  // ─── Shortcuts ─────────────────────────────────────────────────────────────
+
+  useShortcuts(editorShortcuts, {
+    'toggle-add-node': () => setActiveSidePanel((current) => (current === 'nodes' ? null : 'nodes')),
+    'delete-selection': editor.deleteSelection,
+    'clear-selection': editor.clearSelection,
+    'detach-frame': editor.detachSelectionFromFrames,
+    'duplicate-field': editor.duplicateActiveCustomField,
+    undo: editor.undo,
+    redo: editor.redo,
+  });
+
+  // ─── Bootstrap ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
     void bootstrap();
   }, []);
+
+  async function bootstrap() {
+    const authResponse = await fetch('/api/auth/status');
+    setAuth(await authResponse.json());
+    await projectActions.bootstrap();
+    bootstrapped.current = true;
+    const projectId = projectIdFromPath(window.location.pathname);
+    if (projectId) {
+      await projectActions.openProject(projectId, { navigate: false });
+    } else {
+      setStatus('Dashboard');
+    }
+  }
+
+  // ─── UI preference persistence ────────────────────────────────────────────
 
   useEffect(() => {
     document.documentElement.style.setProperty('--font-scale', String(fontScale));
@@ -171,58 +159,7 @@ export function App() {
     localStorage.setItem('imagex.rightWidth', String(rightWidth));
   }, [rightWidth]);
 
-  useEffect(() => {
-    placingNodeIdRef.current = placingNodeId;
-  }, [placingNodeId]);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && placingNodeIdRef.current) {
-        placingNodeOffsetsRef.current = [];
-        setPlacingNodeId(null);
-      }
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, []);
-
-  useEffect(() => {
-    const onMove = (event: MouseEvent) => {
-      lastMousePosRef.current = { x: event.clientX, y: event.clientY };
-    };
-    document.addEventListener('mousemove', onMove);
-    return () => document.removeEventListener('mousemove', onMove);
-  }, []);
-
-  useEffect(() => {
-    const nextLimit = clampHistoryLimit(historyLimit);
-    historyLimitRef.current = nextLimit;
-    localStorage.setItem('imagex.historyLimit', String(nextLimit));
-    if (undoStackRef.current.length > nextLimit) {
-      undoStackRef.current = undoStackRef.current.slice(-nextLimit);
-      setHistoryVersion((version) => version + 1);
-    }
-  }, [historyLimit]);
-
-  useEffect(() => {
-    projectRef.current = project;
-  }, [project]);
-
-  useEffect(() => {
-    workflowRef.current = workflow;
-  }, [workflow]);
-
-  useEffect(() => {
-    nodesRef.current = nodes;
-  }, [nodes]);
-
-  useEffect(() => {
-    edgesRef.current = edges;
-  }, [edges]);
-
-  useEffect(() => {
-    selectedIdRef.current = selectedId;
-  }, [selectedId]);
+  // ─── Routing (popstate) ────────────────────────────────────────────────────
 
   useEffect(() => {
     const onPopState = () => {
@@ -233,10 +170,10 @@ export function App() {
       setShowSettings(false);
       const projectId = projectIdFromPath(window.location.pathname);
       if (projectId) {
-        void openProject(projectId, { navigate: false });
+        void projectActions.openProject(projectId, { navigate: false });
         return;
       }
-      showDashboard({ navigate: false });
+      projectActions.closeProject();
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -248,198 +185,7 @@ export function App() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!bootstrapped.current || !project || !workflow) return;
-    const handle = window.setTimeout(() => {
-      const wrapped = wrapFramesAroundMembers(nodes);
-      const synced = syncFlowToWorkflow(workflow, wrapped.nodes, edges);
-      if (wrapped.changed) {
-        nodesRef.current = wrapped.nodes;
-        setNodes(wrapped.nodes);
-        workflowRef.current = synced;
-        setWorkflow(synced);
-      }
-      setStatus('Autosaving...');
-      void fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflow`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow: synced }),
-      })
-        .then(() => setStatus('Autosaved'))
-        .catch(() => setStatus('Autosave failed'));
-    }, 700);
-    return () => window.clearTimeout(handle);
-  }, [project, workflow, nodes, edges]);
-
-  const selectedNode = useMemo(
-    () => nodes.find((node) => node.id === selectedId)?.data.workflowNode || null,
-    [nodes, selectedId]
-  );
-
-  useShortcuts(editorShortcuts, {
-    'toggle-add-node': () => setActiveSidePanel((current) => (current === 'nodes' ? null : 'nodes')),
-    'delete-selection': deleteSelection,
-    'clear-selection': clearSelection,
-    'detach-frame': detachSelectionFromFrames,
-    'duplicate-field': duplicateActiveCustomField,
-    undo: undo,
-    redo: redo,
-  });
-
-  async function bootstrap() {
-    const [authResponse, projectsResponse, templatesResponse] = await Promise.all([
-      fetch('/api/auth/status'),
-      fetch('/api/projects'),
-      fetch('/api/templates'),
-    ]);
-    setAuth(await authResponse.json());
-    const projectData = (await projectsResponse.json()) as { projects: ImageXProjectSummary[] };
-    const templateData = (await templatesResponse.json()) as { templates: ImageXTemplateSummary[] };
-    setProjects(projectData.projects);
-    setTemplates(templateData.templates);
-    bootstrapped.current = true;
-    const projectId = projectIdFromPath(window.location.pathname);
-    if (projectId) {
-      await openProject(projectId, { navigate: false });
-    } else {
-      setStatus('Dashboard');
-    }
-  }
-
-  async function refreshProjects() {
-    const response = await fetch('/api/projects');
-    const data = (await response.json()) as { projects: ImageXProjectSummary[] };
-    setProjects(data.projects);
-  }
-
-  async function openProject(projectId: string, options: { navigate?: boolean } = {}) {
-    setStatus('Opening project...');
-    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`);
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: response.statusText }));
-      showDashboard({ navigate: true, replace: true });
-      showNotification(body.error || `Project not found: ${projectId}`);
-      return;
-    }
-    const data = (await response.json()) as { project: ImageXProject };
-    loadProject(data.project);
-    if (options.navigate !== false) pushProjectRoute(data.project);
-  }
-
-  async function createProjectFromModal(input: { title: string; description: string; templateId: string }) {
-    setStatus('Creating project...');
-    const response = await fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: response.statusText }));
-      setStatus(body.error || 'Failed to create project');
-      return;
-    }
-    const data = (await response.json()) as { project: ImageXProject };
-    setShowNewProject(false);
-    await refreshProjects();
-    loadProject(data.project);
-    pushProjectRoute(data.project);
-  }
-
-  async function selectWorkflow(workflowId: string) {
-    if (!project || workflow?.id === workflowId) return;
-    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflows/${encodeURIComponent(workflowId)}`);
-    if (!response.ok) {
-      showNotification('Workflow not found.');
-      return;
-    }
-    const data = (await response.json()) as { project: ImageXProject };
-    loadProject(data.project);
-  }
-
-  async function createWorkflow() {
-    if (!project) return;
-    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflows`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Untitled Workflow' }),
-    });
-    if (!response.ok) {
-      showNotification('Failed to create workflow.');
-      return;
-    }
-    const data = (await response.json()) as { project: ImageXProject };
-    loadProject(data.project);
-  }
-
-  async function deleteWorkflow(workflowId: string) {
-    if (!project) return;
-    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflows/${encodeURIComponent(workflowId)}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: 'Failed to delete workflow.' }));
-      showNotification(body.error || 'Failed to delete workflow.');
-      return;
-    }
-    const data = (await response.json()) as { project: ImageXProject };
-    loadProject(data.project);
-  }
-
-  function loadProject(nextProject: ImageXProject) {
-    clearHistory();
-    projectRef.current = nextProject;
-    setProject(nextProject);
-    restoreWorkflowSnapshot(nextProject.workflow, nextProject.workflow.nodes[0]?.id ?? null);
-    void refreshAssets(nextProject.metadata.id);
-    void refreshNodeAssets(nextProject.metadata.id);
-    setSelectedId(Array.isArray(nextProject.workflow.nodes) ? nextProject.workflow.nodes[0]?.id ?? null : null);
-    setOutputResults(new Map());
-    setStatus('Ready');
-  }
-
-  async function refreshAssets(projectId = project?.metadata.id) {
-    if (!projectId) return;
-    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/assets`);
-    if (!response.ok) return;
-    const data = (await response.json()) as { assets: ImageXAsset[] };
-    setAssets(data.assets);
-  }
-
-  async function refreshNodeAssets(projectId = project?.metadata.id) {
-    if (!projectId) return;
-    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/node-assets`);
-    if (!response.ok) return;
-    const data = (await response.json()) as { assets: ImageXNodeAsset[] };
-    setNodeAssets(data.assets);
-  }
-
-  function closeProject() {
-    showDashboard({ navigate: true });
-    void refreshProjects();
-  }
-
-  function showDashboard(options: { navigate?: boolean; replace?: boolean } = {}) {
-    clearHistory();
-    setProject(null);
-    setWorkflow(null);
-    setNodes([]);
-    setEdges([]);
-    setSelectedId(null);
-    setOutputResults(new Map());
-    setMenu(null);
-    setPromptOverlay(null);
-    setStatus('Dashboard');
-    if (options.navigate !== false && window.location.pathname !== '/') {
-      if (options.replace) window.history.replaceState({}, '', '/');
-      else window.history.pushState({}, '', '/');
-    }
-  }
-
-  function showNotification(message: string) {
-    setNotification(message);
-    if (notificationTimer.current) window.clearTimeout(notificationTimer.current);
-    notificationTimer.current = window.setTimeout(() => setNotification(null), 3800);
-  }
+  // ─── Settings routing ──────────────────────────────────────────────────────
 
   function openSettingsRoute() {
     setShowSettings(true);
@@ -449,932 +195,101 @@ export function App() {
   function closeSettingsRoute() {
     setShowSettings(false);
     if (window.location.pathname === '/settings') {
-      if (project) pushProjectRoute(project);
-      else window.history.pushState({}, '', '/');
+      if (project) {
+        pushProjectRoute(project);
+      } else {
+        window.history.pushState({}, '', '/');
+      }
     }
   }
 
-  function applyWorkflow(nextWorkflow: ImageXWorkflow) {
-    restoreWorkflowSnapshot(nextWorkflow, selectedIdRef.current);
-  }
-
-  function restoreWorkflowSnapshot(nextWorkflow: ImageXWorkflow, nextSelectedId: string | null) {
-    const flow = workflowToFlow(
-      nextWorkflow,
-      updateNodeData,
-      openNodeMenu,
-      showCompiledPrompt,
-      addCustomField,
-      updateCustomFieldValue,
-      activateCustomField,
-      openAssetPickerForField
-    );
-    const nextNodes = refreshConnectedTargetHandles(
-      flow.nodes.map((node) => ({ ...node, selected: node.id === nextSelectedId })),
-      flow.edges
-    );
-    workflowRef.current = nextWorkflow;
-    nodesRef.current = nextNodes;
-    edgesRef.current = flow.edges;
-    selectedIdRef.current = nextSelectedId;
-    setWorkflow(nextWorkflow);
-    setNodes(nextNodes);
-    setEdges(flow.edges);
-    setSelectedId(nextSelectedId);
-  }
-
-  function syncLatestWorkflow(nextNodes = nodesRef.current, nextEdges = edgesRef.current) {
-    const current = workflowRef.current;
-    if (!current) return null;
-    const wrapped = wrapFramesAroundMembers(nextNodes);
-    if (wrapped.changed) {
-      nodesRef.current = wrapped.nodes;
-      setNodes(wrapped.nodes);
-    }
-    return syncFlowToWorkflow(current, wrapped.nodes, nextEdges);
-  }
-
-  function commitFlowToWorkflow(nextNodes = nodesRef.current, nextEdges = edgesRef.current) {
-    const nextWorkflow = syncLatestWorkflow(nextNodes, nextEdges);
-    if (!nextWorkflow) return null;
-    workflowRef.current = nextWorkflow;
-    setWorkflow(nextWorkflow);
-    return nextWorkflow;
-  }
-
-  function currentSnapshot(): EditorSnapshot | null {
-    const synced = syncLatestWorkflow();
-    if (!synced) return null;
-    return { workflow: cloneWorkflow(synced), selectedId: selectedIdRef.current };
-  }
-
-  function recordHistory() {
-    if (isRestoringHistory.current) return;
-    const snapshot = currentSnapshot();
-    if (!snapshot) return;
-    const previous = undoStackRef.current.at(-1);
-    if (previous && snapshotsEqual(previous, snapshot)) return;
-    undoStackRef.current = [...undoStackRef.current, snapshot].slice(-historyLimitRef.current);
-    redoStackRef.current = [];
-    setHistoryVersion((version) => version + 1);
-  }
-
-  function recordEditHistory(key: string) {
-    if (activeEditHistoryKeyRef.current !== key) {
-      recordHistory();
-      activeEditHistoryKeyRef.current = key;
-    }
-    if (activeEditHistoryTimerRef.current) window.clearTimeout(activeEditHistoryTimerRef.current);
-    activeEditHistoryTimerRef.current = window.setTimeout(() => {
-      activeEditHistoryKeyRef.current = null;
-    }, 900);
-  }
-
-  function clearHistory() {
-    activeEditHistoryKeyRef.current = null;
-    if (activeEditHistoryTimerRef.current) window.clearTimeout(activeEditHistoryTimerRef.current);
-    undoStackRef.current = [];
-    redoStackRef.current = [];
-    setHistoryVersion((version) => version + 1);
-  }
-
-  function undo() {
-    const snapshot = undoStackRef.current.pop();
-    if (!snapshot) return;
-    const current = currentSnapshot();
-    if (current) redoStackRef.current = [...redoStackRef.current, current].slice(-historyLimitRef.current);
-    isRestoringHistory.current = true;
-    restoreWorkflowSnapshot(cloneWorkflow(snapshot.workflow), snapshot.selectedId);
-    isRestoringHistory.current = false;
-    setStatus('Undo');
-    setHistoryVersion((version) => version + 1);
-  }
-
-  function redo() {
-    const snapshot = redoStackRef.current.pop();
-    if (!snapshot) return;
-    const current = currentSnapshot();
-    if (current) undoStackRef.current = [...undoStackRef.current, current].slice(-historyLimitRef.current);
-    isRestoringHistory.current = true;
-    restoreWorkflowSnapshot(cloneWorkflow(snapshot.workflow), snapshot.selectedId);
-    isRestoringHistory.current = false;
-    setStatus('Redo');
-    setHistoryVersion((version) => version + 1);
-  }
-
-  function updateNodeData(nodeId: string, key: string, value: unknown) {
-    recordEditHistory(`${nodeId}:${key}`);
-    const { nodes: nextNodes } = updateNodeWorkflowData(nodesRef.current, nodeId, { [key]: value });
-    const nextWorkflow = syncLatestWorkflow(nextNodes, edgesRef.current);
-    nodesRef.current = nextNodes;
-    if (nextWorkflow) workflowRef.current = nextWorkflow;
-    setNodes(nextNodes);
-    if (nextWorkflow) setWorkflow(nextWorkflow);
-  }
-
-  function openAssetPickerForField(nodeId: string, fieldId: string) {
-    setAssetPicker({ nodeId, fieldId });
-    void refreshAssets();
-  }
-
-  function openAssetLibrary() {
-    setActiveSidePanel((current) => (current === 'assets' ? null : 'assets'));
-    void refreshAssets();
-    void refreshNodeAssets();
-  }
+  // ─── Top bar menu dispatcher ───────────────────────────────────────────────
 
   function handleTopBarMenuAction(action: string) {
     if (!workflow) return;
-    if (action === 'file-new-workflow') void createWorkflow();
-    if (action === 'file-rename-workflow') renameWorkflowFromMenu(workflow.id);
-    if (action === 'file-compile-prompt') void showCompiledPrompt(selectedIdRef.current ?? undefined);
-    if (action === 'edit-undo') undo();
-    if (action === 'edit-redo') redo();
-    if (action === 'edit-duplicate') duplicateSelection();
-    if (action === 'edit-delete') deleteSelection();
-    if (action === 'edit-disconnect') disconnectSelection();
-    if (action === 'edit-detach-frame') detachSelectionFromFrames();
-    if (action === 'edit-clear-selection') clearSelection();
-    if (action === 'view-zoom-in') flowApiRef.current?.zoomIn();
-    if (action === 'view-zoom-out') flowApiRef.current?.zoomOut();
-    if (action === 'view-fit') flowApiRef.current?.fitView();
+    if (action === 'file-new-workflow') void projectActions.createWorkflow();
+    if (action === 'file-rename-workflow') projectActions.renameWorkflowFromMenu(workflow.id);
+    if (action === 'file-compile-prompt') void handleShowCompiledPrompt(editor.selectedId ?? undefined);
+    if (action === 'edit-undo') editor.undo();
+    if (action === 'edit-redo') editor.redo();
+    if (action === 'edit-duplicate') editor.duplicateSelection();
+    if (action === 'edit-delete') editor.deleteSelection();
+    if (action === 'edit-disconnect') editor.disconnectSelection();
+    if (action === 'edit-detach-frame') editor.detachSelectionFromFrames();
+    if (action === 'edit-clear-selection') editor.clearSelection();
+    if (action === 'view-zoom-in') editor.flowApiRef.current?.zoomIn();
+    if (action === 'view-zoom-out') editor.flowApiRef.current?.zoomOut();
+    if (action === 'view-fit') editor.flowApiRef.current?.fitView();
     if (action === 'view-toggle-minimap') setShowMinimap((current) => !current);
     if (action === 'view-toggle-inspector') setRightOpen((current) => !current);
     if (action === 'settings-open') openSettingsRoute();
     if (action === 'settings-shortcuts') setShowShortcuts(true);
-    if (action === 'exit-project') closeProject();
+    if (action === 'exit-project') projectActions.closeProject();
   }
 
-  function selectAssetForField(asset: ImageXAsset) {
-    if (!assetPicker) return;
-    recordHistory();
-    const { nodeId, fieldId } = assetPicker;
-    const { nodes: nextNodes } = updateNodeWorkflowData(nodesRef.current, nodeId, {
-      [fieldId]: asset.file,
-      assetId: asset.id,
-      assetUrl: asset.url,
-      assetName: asset.name,
-    });
-    const nextWorkflow = syncLatestWorkflow(nextNodes, edgesRef.current);
-    nodesRef.current = nextNodes;
-    if (nextWorkflow) workflowRef.current = nextWorkflow;
-    setNodes(nextNodes);
-    if (nextWorkflow) setWorkflow(nextWorkflow);
-    setAssetPicker(null);
-  }
+  // ─── Compiled prompt with overlay ──────────────────────────────────────────
 
-  async function importAssets(files: FileList | null) {
-    if (!project || !files?.length) return;
-    let nextAssets = assets;
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue;
-      const dataBase64 = await fileToBase64(file);
-      const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/assets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: file.name, mimeType: file.type, dataBase64 }),
-      });
-      if (response.ok) {
-        const data = (await response.json()) as { assets: ImageXAsset[] };
-        nextAssets = data.assets;
-      }
-    }
-    setAssets(nextAssets);
-  }
-
-  function renameAsset(assetId: string) {
-    const asset = assets.find((candidate) => candidate.id === assetId);
-    setTextDialog({
-      type: 'rename-asset',
-      id: assetId,
-      title: 'Rename asset',
-      label: 'Name',
-      initialValue: asset?.name || 'Asset',
-    });
-  }
-
-  async function submitRenameAsset(assetId: string, name: string) {
-    if (!project) return;
-    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/assets/${encodeURIComponent(assetId)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    if (response.ok) setAssets(((await response.json()) as { assets: ImageXAsset[] }).assets);
-  }
-
-  async function deleteAsset(assetId: string) {
-    if (!project) return;
-    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/assets/${encodeURIComponent(assetId)}`, {
-      method: 'DELETE',
-    });
-    if (response.ok) setAssets(((await response.json()) as { assets: ImageXAsset[] }).assets);
-  }
-
-  function addCustomField(nodeId: string, preset: string) {
-    const field = createCustomFieldDefinition(preset as CustomFieldKind);
-    setActiveFieldRef({ nodeId, fieldId: field.id });
-    updateCustomFields(nodeId, (fields) => [...fields, field]);
-  }
-
-  function updateCustomFieldValue(nodeId: string, fieldId: string, value: unknown) {
-    updateCustomFields(nodeId, (fields) =>
-      fields.map((field) => (field.id === fieldId ? { ...field, value: normalizeCustomFieldValue(value) } : field))
-    );
-  }
-
-  function duplicateActiveCustomField() {
-    if (selectedNodeIds().length > 0 || selectedIdRef.current) {
-      duplicateSelection();
-      return;
-    }
-    const active = activeCustomFieldRef.current || activeCustomField;
-    if (!active) {
-      duplicateSelection();
-      return;
-    }
-    duplicateCustomField(active.nodeId, active.fieldId);
-  }
-
-  function clearSelection() {
-    setMenu(null);
-    setSelectedId(null);
-    selectedIdRef.current = null;
-    const nextNodes = nodesRef.current.map((node) => ({ ...node, selected: false }));
-    const nextEdges = edgesRef.current.map((edge) => ({ ...edge, selected: false }));
-    nodesRef.current = nextNodes;
-    edgesRef.current = nextEdges;
-    setNodes(nextNodes);
-    setEdges(nextEdges);
-  }
-
-  function duplicateCustomField(nodeId: string, fieldId: string) {
-    updateCustomFields(nodeId, (fields) => {
-      const index = fields.findIndex((field) => field.id === fieldId);
-      if (index === -1) return fields;
-      const source = fields[index]!;
-      const copyId = `field-${crypto.randomUUID().slice(0, 8)}`;
-      // Guard against double-invocation
-      if (fields.some((f) => f.id === copyId)) return fields;
-      const copy: CustomFieldDefinition = {
-        ...source,
-        id: copyId,
-        label: `${source.label} Copy`,
-      };
-      setActiveFieldRef({ nodeId, fieldId: copy.id });
-      return [...fields.slice(0, index + 1), copy, ...fields.slice(index + 1)];
-    });
-  }
-
-  function activateCustomField(nodeId: string, fieldId: string) {
-    setActiveFieldRef({ nodeId, fieldId });
-  }
-
-  function setActiveFieldRef(active: { nodeId: string; fieldId: string }) {
-    activeCustomFieldRef.current = active;
-    setActiveCustomField(active);
-  }
-
-  function updateCustomFields(nodeId: string, updater: (fields: CustomFieldDefinition[]) => CustomFieldDefinition[]) {
-    recordEditHistory(`custom-fields:${nodeId}`);
-    const nextNodes = nodesRef.current.map((node) => {
-      if (node.id !== nodeId) return node;
-      const fields = Array.isArray(node.data.workflowNode.data.fields)
-        ? (node.data.workflowNode.data.fields as CustomFieldDefinition[])
-        : [];
-      const workflowNode = {
-        ...node.data.workflowNode,
-        data: { ...node.data.workflowNode.data, fields: updater(fields) },
-      };
-      return { ...node, data: { ...node.data, workflowNode } };
-    });
-    const nextWorkflow = syncLatestWorkflow(nextNodes, edgesRef.current);
-    const nextEdges = edgesRef.current;
-    const nextConnectedNodes = refreshConnectedTargetHandles(nextNodes, nextEdges);
-    nodesRef.current = nextConnectedNodes;
-    if (nextWorkflow) workflowRef.current = nextWorkflow;
-    setNodes(nextConnectedNodes);
-    if (nextWorkflow) setWorkflow(nextWorkflow);
-  }
-
-  function updateFlowNodes(nextNodes: UiNode[]) {
-    nodesRef.current = nextNodes;
-    setNodes(nextNodes);
-  }
-
-  function updateFlowEdges(nextEdges: UiEdge[]) {
-    edgesRef.current = nextEdges;
-    setEdges(nextEdges);
-    const nextNodes = refreshConnectedTargetHandles(nodesRef.current, nextEdges);
-    nodesRef.current = nextNodes;
-    setNodes(nextNodes);
-    const nextWorkflow = syncLatestWorkflow(nextNodes, nextEdges);
-    if (nextWorkflow) {
-      workflowRef.current = nextWorkflow;
-      setWorkflow(nextWorkflow);
+  async function handleShowCompiledPrompt(nodeId?: string) {
+    const prompt = await editor.showCompiledPrompt(nodeId);
+    if (prompt !== undefined) {
+      setPromptOverlay({ prompt });
     }
   }
 
-  function openNodeMenu(nodeId: string, position: { x: number; y: number }) {
-    selectedIdRef.current = nodeId;
-    setSelectedId(nodeId);
-    const nextNodes = nodesRef.current.map((node) => ({ ...node, selected: node.id === nodeId }));
-    nodesRef.current = nextNodes;
-    setNodes(nextNodes);
-    setMenu({ type: 'node', nodeId, x: position.x, y: position.y });
-  }
-
-  function handleSelectionChange(nodeIds: string[], edgeIds: string[]) {
-    selectedIdRef.current = nodeIds.length === 1 ? nodeIds[0]! : null;
-    setSelectedId(nodeIds.length === 1 ? nodeIds[0]! : null);
-    const nodeSet = new Set(nodeIds);
-    const edgeSet = new Set(edgeIds);
-    const nextNodes = nodesRef.current.map((node) => ({ ...node, selected: nodeSet.has(node.id) }));
-    const nextEdges = edgesRef.current.map((edge) => ({ ...edge, selected: edgeSet.has(edge.id) }));
-    nodesRef.current = nextNodes;
-    edgesRef.current = nextEdges;
-  }
+  // ─── Context menu dispatcher ───────────────────────────────────────────────
 
   function handleMenuAction(action: string, menuState: Exclude<FloatingMenu, null>) {
     setMenu(null);
     if (menuState.type === 'node') {
-      if (action === 'duplicate') duplicateNode(menuState.nodeId);
-      if (action === 'create-asset') openCreateNodeAssetDialog(menuState.nodeId);
-      if (action === 'delete') deleteNode(menuState.nodeId);
-      if (action === 'disconnect') disconnectNode(menuState.nodeId);
-      if (action === 'remove-frame') removeFrameOnly(menuState.nodeId);
+      if (action === 'duplicate') editor.duplicateNode(menuState.nodeId);
+      if (action === 'create-asset') projectActions.openCreateNodeAssetDialog(menuState.nodeId);
+      if (action === 'delete') editor.deleteNode(menuState.nodeId);
+      if (action === 'disconnect') editor.disconnectNode(menuState.nodeId);
+      if (action === 'remove-frame') editor.removeFrameOnly(menuState.nodeId);
       if (action === 'detach-frame') detachNodeFromFrame(menuState.nodeId);
       return;
     }
     if (menuState.type === 'selection') {
-      if (action === 'duplicate') duplicateSelection();
-      if (action === 'delete') deleteSelection();
-      if (action === 'disconnect') disconnectSelection();
-      if (action === 'detach-frame') detachSelectionFromFrames();
+      if (action === 'duplicate') editor.duplicateSelection();
+      if (action === 'delete') editor.deleteSelection();
+      if (action === 'disconnect') editor.disconnectSelection();
+      if (action === 'detach-frame') editor.detachSelectionFromFrames();
       return;
     }
     if (menuState.type === 'pane') {
-      if (action.startsWith('add:')) addNode(action.slice(4) as NodeType, { x: menuState.flowX, y: menuState.flowY });
+      if (action.startsWith('add:')) editor.addNode(action.slice(4) as NodeType, { x: menuState.flowX, y: menuState.flowY });
       return;
     }
     if (menuState.type === 'workflow') {
-      if (action === 'rename') renameWorkflowFromMenu(menuState.workflowId);
-      if (action === 'delete') deleteWorkflow(menuState.workflowId);
+      if (action === 'rename') projectActions.renameWorkflowFromMenu(menuState.workflowId);
+      if (action === 'delete') projectActions.deleteWorkflow(menuState.workflowId);
       return;
     }
     if (menuState.type === 'asset') {
-      if (action === 'rename') renameAsset(menuState.assetId);
-      if (action === 'delete') deleteAsset(menuState.assetId);
+      if (action === 'rename') projectActions.renameAsset(menuState.assetId);
+      if (action === 'delete') projectActions.deleteAsset(menuState.assetId);
       return;
     }
     if (menuState.type === 'project') {
-      if (action === 'open') void openProject(menuState.projectId);
-      if (action === 'rename') renameProjectFromMenu(menuState.projectId);
-      if (action === 'delete') void deleteProjectFromMenu(menuState.projectId);
+      if (action === 'open') void projectActions.openProject(menuState.projectId);
+      if (action === 'rename') projectActions.renameProjectFromMenu(menuState.projectId);
+      if (action === 'delete') void projectActions.deleteProjectFromMenu(menuState.projectId);
     }
   }
 
-  function selectedNodeIds(): string[] {
-    return graphSelectedNodeIds(nodesRef.current);
+  function detachNodeFromFrame(_nodeId: string) {
+    // The node is already selected by openNodeMenu, so detachSelectionFromFrames handles it.
+    editor.detachSelectionFromFrames();
   }
 
-  function selectedEdgeIds(): string[] {
-    return graphSelectedEdgeIds(edgesRef.current);
+  // ─── Asset picker ──────────────────────────────────────────────────────────
+
+  function selectAssetForField(asset: ImageXAsset) {
+    if (!assetPicker) return;
+    editor.selectAssetForField(asset, assetPicker);
   }
 
-  function expandFrameSelection(selected: Set<string>): Set<string> {
-    return expandSelectionWithFrameMembers(selected, nodesRef.current);
-  }
-
-  function renameWorkflowFromMenu(workflowId: string) {
-    if (!project) return;
-    const entry = project.metadata.workflows?.find((candidate) => candidate.id === workflowId);
-    setTextDialog({
-      type: 'rename-workflow',
-      id: workflowId,
-      title: 'Rename workflow',
-      label: 'Name',
-      initialValue: entry?.title || workflow?.name || 'Untitled Workflow',
-    });
-  }
-
-  async function submitRenameWorkflow(workflowId: string, name: string) {
-    if (!project) return;
-    if (workflow?.id === workflowId) {
-      renameWorkflow(name);
-      return;
-    }
-    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflows/${encodeURIComponent(workflowId)}`);
-    if (!response.ok) return;
-    const data = (await response.json()) as { project: ImageXProject };
-    const renamed = { ...data.project.workflow, name };
-    const saveResponse = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflow`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workflow: renamed }),
-    });
-    if (saveResponse.ok) {
-      const saved = (await saveResponse.json()) as { project: ImageXProject };
-      setProject((current) => (current ? { ...current, metadata: saved.project.metadata } : current));
-    }
-  }
-
-  function renameProjectFromMenu(projectId: string) {
-    const item = projects.find((candidate) => candidate.id === projectId);
-    setTextDialog({
-      type: 'rename-project',
-      id: projectId,
-      title: 'Rename project',
-      label: 'Name',
-      initialValue: item?.title || 'Untitled Project',
-    });
-  }
-
-  async function submitRenameProject(projectId: string, name: string) {
-    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: name }),
-    });
-    if (response.ok) {
-      const data = (await response.json()) as { project: ImageXProject };
-      await refreshProjects();
-      if (project?.metadata.id === projectId) {
-        setProject(data.project);
-      }
-    }
-  }
-
-  function deleteProjectFromMenu(projectId: string) {
-    const item = projects.find((candidate) => candidate.id === projectId);
-    setConfirmDialog({
-      type: 'delete-project',
-      id: projectId,
-      title: 'Delete project',
-      message: `Delete "${item?.title || 'this project'}" and all of its files? This cannot be undone.`,
-      confirmLabel: 'Delete Project',
-    });
-  }
-
-  async function submitDeleteProject(projectId: string) {
-    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
-    if (response.ok) {
-      if (project?.metadata.id === projectId) showDashboard({ navigate: true });
-      await refreshProjects();
-    }
-  }
-
-  function openCreateNodeAssetDialog(nodeId: string) {
-    const node = nodesRef.current.find((candidate) => candidate.id === nodeId)?.data.workflowNode;
-    if (!node || node.type === 'frame') return;
-    const meta = nodeMeta[node.type];
-    const defaultName =
-      (typeof node.data.name === 'string' && node.data.name.trim()) ||
-      (typeof node.data.title === 'string' && node.data.title.trim()) ||
-      meta.label;
-    setTextDialog({
-      type: 'create-node-asset',
-      id: nodeId,
-      title: 'Create node asset',
-      label: 'Name',
-      initialValue: defaultName,
-    });
-  }
-
-  async function createNodeAssetFromNode(nodeId: string, name: string) {
-    if (!project) return;
-    const payload = nodeAssetPayload(nodeId);
-    if (!payload) return;
-    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/node-assets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, ...payload }),
-    });
-    if (response.ok) {
-      const data = (await response.json()) as { assets: ImageXNodeAsset[] };
-      setNodeAssets(data.assets);
-      setActiveSidePanel('assets');
-    }
-  }
-
-  function nodeAssetPayload(rootNodeId: string): { rootNodeId: string; nodes: ImageXNode[]; edges: ImageXEdge[] } | null {
-    const root = nodesRef.current.find((node) => node.id === rootNodeId);
-    if (!root) return null;
-    const included = new Set<string>([rootNodeId]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const edge of edgesRef.current) {
-        if (!edge.target || !edge.source) continue;
-        if (included.has(edge.target) && !included.has(edge.source)) {
-          included.add(edge.source);
-          changed = true;
-        }
-      }
-    }
-    const nodes = nodesRef.current
-      .filter((node) => included.has(node.id))
-      .map((node) => cloneWorkflowNode(node.data.workflowNode));
-    const edges = edgesRef.current
-      .filter((edge) => included.has(edge.source) && included.has(edge.target))
-      .map((edge) => {
-        const nextEdge: ImageXEdge = { id: edge.id, source: edge.source, target: edge.target };
-        if (edge.sourceHandle) nextEdge.sourceHandle = edge.sourceHandle;
-        if (edge.targetHandle) nextEdge.targetHandle = edge.targetHandle;
-        return nextEdge;
-      });
-    return { rootNodeId, nodes, edges };
-  }
-
-  function renameWorkflow(name: string) {
-    if (!workflow) return;
-    recordHistory();
-    const nextWorkflow = { ...(syncLatestWorkflow() || syncFlowToWorkflow(workflow, nodesRef.current, edgesRef.current)), name };
-    workflowRef.current = nextWorkflow;
-    setWorkflow(nextWorkflow);
-    // Update project metadata so sidebar workflow list refreshes immediately
-    setProject((current) => {
-      if (!current) return current;
-      const nextMetadata = { ...current.metadata };
-      if (nextMetadata.workflows?.length) {
-        nextMetadata.workflows = nextMetadata.workflows.map((w) =>
-          w.id === workflow.id ? { ...w, title: name } : w
-        );
-      }
-      return { ...current, metadata: nextMetadata, workflow: { ...current.workflow, name } };
-    });
-  }
-
-  function addNode(type: Parameters<typeof createUiWorkflowNode>[0], position?: { x: number; y: number }) {
-    if (!workflow) return;
-    recordHistory();
-    const currentWithLayout = syncLatestWorkflow() || syncFlowToWorkflow(workflow, nodesRef.current, edgesRef.current);
-    const center = flowApiRef.current?.screenToFlowPosition({
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-    });
-    const nextNode = createUiWorkflowNode(
-      type,
-      position || center || {
-        x: 160 + currentWithLayout.nodes.length * 28,
-        y: 140 + currentWithLayout.nodes.length * 34,
-      }
-    );
-    const nextWorkflow = {
-      ...currentWithLayout,
-      nodes: [...currentWithLayout.nodes, nextNode],
-    };
-    selectedIdRef.current = nextNode.id;
-    placingNodeOffsetsRef.current = [{ id: nextNode.id, dx: 0, dy: 0 }];
-    applyWorkflow(nextWorkflow);
-    setSelectedId(nextNode.id);
-    setPlacingNodeId(nextNode.id);
-    setActiveSidePanel(null);
-  }
-
-  function addWorkflowNodesForPlacement(newNodes: ImageXNode[], newEdges: ImageXEdge[], rootNodeId: string) {
-    if (!workflow || newNodes.length === 0) return;
-    recordHistory();
-    const currentWithLayout = syncLatestWorkflow() || syncFlowToWorkflow(workflow, nodesRef.current, edgesRef.current);
-    const nextWorkflow = {
-      ...currentWithLayout,
-      nodes: [...currentWithLayout.nodes, ...newNodes],
-      edges: [...currentWithLayout.edges, ...newEdges],
-    };
-    selectedIdRef.current = rootNodeId;
-    const root = newNodes.find((node) => node.id === rootNodeId) || newNodes[0]!;
-    placingNodeOffsetsRef.current = newNodes.map((node) => ({
-      id: node.id,
-      dx: node.position.x - root.position.x,
-      dy: node.position.y - root.position.y,
-    }));
-    applyWorkflow(nextWorkflow);
-    setSelectedId(rootNodeId);
-    setPlacingNodeId(rootNodeId);
-    setActiveSidePanel(null);
-  }
-
-  function addImageAssetNode(asset: ImageXAsset) {
-    const position = flowApiRef.current?.screenToFlowPosition(lastMousePosRef.current) || { x: 160, y: 140 };
-    const node = createUiWorkflowNode('image', position);
-    node.data = {
-      ...node.data,
-      path: asset.file,
-      assetId: asset.id,
-      assetUrl: asset.url,
-      assetName: asset.name,
-    };
-    addWorkflowNodesForPlacement([node], [], node.id);
-    setActiveSidePanel(null);
-  }
-
-  function addNodeAsset(asset: ImageXNodeAsset) {
-    const root = asset.nodes.find((node) => node.id === asset.rootNodeId) || asset.nodes[0];
-    if (!root) return;
-    const idMap = new Map(asset.nodes.map((node) => [node.id, `${node.type}-${crypto.randomUUID().slice(0, 8)}`]));
-    const rootNewId = idMap.get(root.id)!;
-    const rootPosition = flowApiRef.current?.screenToFlowPosition(lastMousePosRef.current) || root.position;
-    const offset = { x: rootPosition.x - root.position.x, y: rootPosition.y - root.position.y };
-    const newNodes = asset.nodes.map((node) => {
-      const copy = cloneWorkflowNode(node);
-      copy.id = idMap.get(node.id)!;
-      copy.position = { x: node.position.x + offset.x, y: node.position.y + offset.y };
-      if (typeof copy.data.frameId === 'string' && idMap.has(copy.data.frameId)) copy.data.frameId = idMap.get(copy.data.frameId);
-      return copy;
-    });
-    const newEdges = asset.edges
-      .filter((edge) => idMap.has(edge.source) && idMap.has(edge.target))
-      .map((edge) => {
-        const nextEdge: ImageXEdge = {
-          id: `${idMap.get(edge.source)}-${edge.sourceHandle || 'out'}-${idMap.get(edge.target)}-${edge.targetHandle || 'in'}`,
-          source: idMap.get(edge.source)!,
-          target: idMap.get(edge.target)!,
-        };
-        if (edge.sourceHandle) nextEdge.sourceHandle = edge.sourceHandle;
-        if (edge.targetHandle) nextEdge.targetHandle = edge.targetHandle;
-        return nextEdge;
-      });
-    addWorkflowNodesForPlacement(newNodes, newEdges, rootNewId);
-    setActiveSidePanel(null);
-  }
-
-  function handlePlacingMove(nodeId: string, position: { x: number; y: number }) {
-    const current = nodesRef.current;
-    const offsets = placingNodeOffsetsRef.current.length
-      ? placingNodeOffsetsRef.current
-      : [{ id: nodeId, dx: 0, dy: 0 }];
-    const positions = new Map(offsets.map((item) => [item.id, { x: position.x + item.dx, y: position.y + item.dy }]));
-    const next = current.map((node) => {
-      const nextPosition = positions.get(node.id);
-      return nextPosition ? { ...node, position: nextPosition } : node;
-    });
-    nodesRef.current = next;
-    setNodes(next);
-  }
-
-  function handlePlacingDrop() {
-    const id = placingNodeIdRef.current;
-    if (!id) return;
-    placingNodeOffsetsRef.current = [];
-    setPlacingNodeId(null);
-    commitFlowToWorkflow();
-  }
-
-  function deleteNode(nodeId: string) {
-    if (!workflow) return;
-    recordHistory();
-    const currentWithLayout = syncLatestWorkflow() || workflow;
-    const node = nodesRef.current.find((candidate) => candidate.id === nodeId);
-    const idsToDelete =
-      node?.type === 'frame'
-        ? new Set([nodeId, ...frameMembers(nodeId, nodesRef.current).map((inside) => inside.id)])
-        : new Set([nodeId]);
-    const nextWorkflow = deleteWorkflowNodes(currentWithLayout, idsToDelete);
-    setMenu(null);
-    setSelectedId(null);
-    applyWorkflow(nextWorkflow);
-  }
-
-  function removeFrameOnly(nodeId: string) {
-    if (!workflow) return;
-    const node = nodesRef.current.find((candidate) => candidate.id === nodeId);
-    if (!node || node.type !== 'frame') return;
-    recordHistory();
-    const currentWithLayout = syncLatestWorkflow() || workflow;
-    setMenu(null);
-    setSelectedId(null);
-    applyWorkflow(removeFrameOnlyFromWorkflow(currentWithLayout, nodeId));
-  }
-
-  function disconnectHandle(nodeId: string, handleId: string) {
-    recordEditHistory(`disconnect:${nodeId}:${handleId}`);
-    const nextEdges = edgesRef.current.filter(
-      (edge) => !(edge.target === nodeId && edge.targetHandle === handleId)
-    );
-    edgesRef.current = nextEdges;
-    setEdges(nextEdges);
-    const nextNodes = refreshConnectedTargetHandles(nodesRef.current, nextEdges);
-    nodesRef.current = nextNodes;
-    setNodes(nextNodes);
-    const nextWorkflow = syncLatestWorkflow(nextNodes, nextEdges);
-    if (nextWorkflow) { workflowRef.current = nextWorkflow; setWorkflow(nextWorkflow); }
-  }
-
-  function deleteSelection() {
-    if (!workflow) return;
-    const selectedNodes = expandFrameSelection(new Set(selectedNodeIds()));
-    const selectedEdges = new Set(selectedEdgeIds());
-    if (selectedNodes.size === 1 && selectedEdges.size === 0) {
-      deleteNode([...selectedNodes][0]!);
-      return;
-    }
-    if (selectedNodes.size === 0 && selectedEdges.size === 0) return;
-    recordHistory();
-    const currentWithLayout = syncLatestWorkflow() || syncFlowToWorkflow(workflow, nodesRef.current, edgesRef.current);
-    applyWorkflow(deleteWorkflowNodes(currentWithLayout, selectedNodes, selectedEdges));
-  }
-
-  function disconnectSelection() {
-    if (!workflow) return;
-    const selectedNodes = expandFrameSelection(new Set(selectedNodeIds()));
-    if (!selectedNodes.size) return;
-    recordHistory();
-    const currentWithLayout = syncLatestWorkflow() || syncFlowToWorkflow(workflow, nodesRef.current, edgesRef.current);
-    applyWorkflow(disconnectNodes(currentWithLayout, selectedNodes));
-  }
-
-  function detachSelectionFromFrames() {
-    const ids = new Set(selectedNodeIds());
-    if (ids.size === 0 && selectedIdRef.current) ids.add(selectedIdRef.current);
-    detachNodesFromFrameIds(ids);
-  }
-
-  function detachNodeFromFrame(nodeId: string) {
-    detachNodesFromFrameIds(new Set([nodeId]));
-  }
-
-  function detachNodesFromFrameIds(nodeIds: Set<string>) {
-    if (!workflow || nodeIds.size === 0) return;
-    const result = detachNodesFromFrames(nodesRef.current, nodeIds);
-    if (!result.changed) return;
-    recordHistory();
-    updateFlowNodesAndCommit(result.nodes, false);
-  }
-
-  function duplicateNode(nodeId: string) {
-    if (!workflow) return;
-    recordHistory();
-    const currentWithLayout = syncLatestWorkflow() || workflow;
-    const node = currentWithLayout.nodes.find((candidate) => candidate.id === nodeId);
-    if (!node) return;
-    if (node.type === 'frame') {
-      const selected = new Set([nodeId, ...frameMembers(nodeId, nodesRef.current).map((inside) => inside.id)]);
-      const duplicated = duplicateWorkflowNodes(currentWithLayout, selected, 48);
-      applyWorkflow(duplicated.workflow);
-      return;
-    }
-    const duplicated = duplicateWorkflowNodes(currentWithLayout, new Set([nodeId]), 36);
-    const copyId = duplicated.copyIds[0] ?? null;
-    const underCursor = flowApiRef.current?.screenToFlowPosition(lastMousePosRef.current);
-    if (underCursor && copyId) {
-      const copy = duplicated.workflow.nodes.find((n) => n.id === copyId);
-      if (copy) copy.position = underCursor;
-    }
-    setMenu(null);
-    selectedIdRef.current = copyId;
-    setSelectedId(copyId);
-    setPlacingNodeId(copyId);
-    applyWorkflow(duplicated.workflow);
-  }
-
-  function duplicateSelection() {
-    if (!workflow) return;
-    const ids = [...expandFrameSelection(new Set(selectedNodeIds()))];
-    if (ids.length === 0 && selectedIdRef.current) ids.push(selectedIdRef.current);
-    if (ids.length === 0) return;
-    if (ids.length === 1) {
-      duplicateNode(ids[0]!);
-      return;
-    }
-    recordHistory();
-    const currentWithLayout = syncLatestWorkflow() || workflow;
-    const duplicated = duplicateWorkflowNodes(currentWithLayout, new Set(ids), 44);
-    applyWorkflow(duplicated.workflow);
-    const copyIds = new Set(duplicated.copyIds);
-    setNodes((current) => {
-      const next = current.map((node) => ({ ...node, selected: copyIds.has(node.id) }));
-      nodesRef.current = next;
-      return next;
-    });
-  }
-
-  function disconnectNode(nodeId: string) {
-    if (!workflow) return;
-    recordHistory();
-    const currentWithLayout = syncLatestWorkflow() || syncFlowToWorkflow(workflow, nodesRef.current, edgesRef.current);
-    setMenu(null);
-    applyWorkflow(disconnectNodes(currentWithLayout, new Set([nodeId])));
-  }
-
-  function moveFrameContents(frameId: string, delta: { x: number; y: number }) {
-    const moved = moveFrameMembers(nodesRef.current, frameId, delta);
-    if (!moved.changed) return;
-    updateFlowNodes(moved.nodes);
-  }
-
-  function expandFramesForNode(nodeId: string) {
-    if (frameWrapRafRef.current) {
-      window.cancelAnimationFrame(frameWrapRafRef.current);
-      frameWrapRafRef.current = null;
-    }
-    const attached = attachNodeToFrameAtCenter(nodesRef.current, nodeId);
-    const cleared = setHighlightedFrame(attached.nodes, null);
-    const wrapped = wrapFramesAroundMembers(cleared);
-    const nextNodes = wrapped.nodes;
-    if (attached.changed || wrapped.changed) updateFlowNodesAndCommit(nextNodes, false);
-    else {
-      updateFlowNodes(cleared);
-      commitFlowToWorkflow(cleared, edgesRef.current);
-    }
-  }
-
-  function handleNodeDragFrameState(nodeId: string, position: { x: number; y: number }) {
-    const current = nodesRef.current;
-    const withPosition = current.map((node) => (node.id === nodeId ? { ...node, position } : node));
-    const dragged = withPosition.find((node) => node.id === nodeId);
-    const frameId = hoveredFrameForNodeCenter(withPosition, nodeId);
-    const highlighted = setHighlightedFrame(withPosition, frameId);
-    const memberFrameId = typeof dragged?.data.workflowNode.data.frameId === 'string' ? dragged.data.workflowNode.data.frameId : null;
-    if (!memberFrameId) {
-      if (highlighted !== current) updateFlowNodes(highlighted);
-      return;
-    }
-    if (frameWrapRafRef.current) window.cancelAnimationFrame(frameWrapRafRef.current);
-    frameWrapRafRef.current = window.requestAnimationFrame(() => {
-      frameWrapRafRef.current = null;
-      const wrapped = wrapFramesAroundMembers(highlighted, new Set([memberFrameId]));
-      updateFlowNodes(wrapped.nodes);
-    });
-  }
-
-  function updateFlowNodesAndCommit(nextNodes: UiNode[], shouldRecordHistory = true) {
-    if (shouldRecordHistory) recordHistory();
-    updateFlowNodes(nextNodes);
-    commitFlowToWorkflow(nextNodes, edgesRef.current);
-  }
-
-  async function runWorkflow() {
-    if (!workflow || !project) return;
-    setStatus('Generating...');
-
-    const nextWorkflow = syncFlowToWorkflow(workflow, nodes, edges);
-    setWorkflow(nextWorkflow);
-
-    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workflow: nextWorkflow }),
-    });
-
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: response.statusText }));
-      setStatus(body.error || 'Generation failed');
-      return;
-    }
-
-    const data = (await response.json()) as GenerateWorkflowResponse;
-    const newResults = new Map<string, OutputNodeResult>();
-    let totalImages = 0;
-    for (const r of data.results) {
-      newResults.set(r.outputNodeId, r);
-      totalImages += r.images.length;
-    }
-    setOutputResults(newResults);
-    setStatus(`Generated ${totalImages} image${totalImages === 1 ? '' : 's'}`);
-
-    const withPreviews = {
-      ...nextWorkflow,
-      nodes: nextWorkflow.nodes.map((node) => {
-        if (node.type !== 'codex-output') return node;
-        const result = newResults.get(node.id);
-        const previewUrl = result?.images[0]?.url;
-        return previewUrl ? { ...node, data: { ...node.data, previewUrl } } : node;
-      }),
-    };
-    applyWorkflow(withPreviews);
-    void fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflow`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workflow: withPreviews }),
-    });
-  }
-
-  async function showCompiledPrompt(nodeId?: string) {
-    const currentProject = projectRef.current;
-    const currentWorkflow = workflowRef.current;
-    if (!currentWorkflow || !currentProject) {
-      setStatus('Open a project before compiling the prompt');
-      return;
-    }
-    try {
-      const nextWorkflow = syncFlowToWorkflow(currentWorkflow, nodesRef.current, edgesRef.current);
-      const response = await fetch(`/api/projects/${encodeURIComponent(currentProject.metadata.id)}/compile`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow: nextWorkflow, outputNodeId: nodeId }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({ error: response.statusText }));
-        setStatus(body.error || 'Failed to compile prompt');
-        return;
-      }
-      const data = (await response.json()) as { prompt?: string };
-      const prompt = data.prompt ?? '';
-      setPromptOverlay({ prompt });
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Failed to compile prompt');
-    }
-  }
+  // ─── Dialog submission ─────────────────────────────────────────────────────
 
   async function submitTextDialog(value: string) {
     if (!textDialog) return;
@@ -1382,18 +297,20 @@ export function App() {
     if (!trimmed) return;
     const dialog = textDialog;
     setTextDialog(null);
-    if (dialog.type === 'rename-asset') await submitRenameAsset(dialog.id, trimmed);
-    if (dialog.type === 'rename-workflow') await submitRenameWorkflow(dialog.id, trimmed);
-    if (dialog.type === 'rename-project') await submitRenameProject(dialog.id, trimmed);
-    if (dialog.type === 'create-node-asset') await createNodeAssetFromNode(dialog.id, trimmed);
+    if (dialog.type === 'rename-asset') await projectActions.submitRenameAsset(dialog.id, trimmed);
+    if (dialog.type === 'rename-workflow') await projectActions.submitRenameWorkflow(dialog.id, trimmed);
+    if (dialog.type === 'rename-project') await projectActions.submitRenameProject(dialog.id, trimmed);
+    if (dialog.type === 'create-node-asset') await projectActions.createNodeAssetFromNode(dialog.id, trimmed);
   }
 
   async function submitConfirmDialog() {
     if (!confirmDialog) return;
     const dialog = confirmDialog;
     setConfirmDialog(null);
-    if (dialog.type === 'delete-project') await submitDeleteProject(dialog.id);
+    if (dialog.type === 'delete-project') await projectActions.submitDeleteProject(dialog.id);
   }
+
+  // ─── Dialogs JSX ───────────────────────────────────────────────────────────
 
   const appDialogs = (
     <>
@@ -1422,6 +339,8 @@ export function App() {
     </>
   );
 
+  // ─── Dashboard view ────────────────────────────────────────────────────────
+
   if (!project || !workflow) {
     return (
       <main className="dashboard-shell">
@@ -1439,11 +358,11 @@ export function App() {
           </Button>
         </section>
         <section className="project-grid">
-          {projects.map((item) => (
+          {projectActions.projects.map((item) => (
             <button
               key={item.id}
               className="project-card shadcn-card-button"
-              onClick={() => openProject(item.id)}
+              onClick={() => projectActions.openProject(item.id)}
               onContextMenu={(event) => {
                 event.preventDefault();
                 setMenu({ type: 'project', projectId: item.id, x: event.clientX, y: event.clientY });
@@ -1454,7 +373,7 @@ export function App() {
               <small>{item.path}</small>
             </button>
           ))}
-          {projects.length === 0 && (
+          {projectActions.projects.length === 0 && (
             <div className="empty-dashboard">
               <strong>No projects yet</strong>
               <span>Create a project from scratch or start from a workflow template.</span>
@@ -1463,8 +382,8 @@ export function App() {
         </section>
         {showNewProject && (
           <NewProjectModal
-            templates={templates}
-            onCreate={createProjectFromModal}
+            templates={projectActions.templates}
+            onCreate={projectActions.createProjectFromModal}
             onClose={() => setShowNewProject(false)}
           />
         )}
@@ -1475,14 +394,16 @@ export function App() {
     );
   }
 
+  // ─── Editor view ───────────────────────────────────────────────────────────
+
   return (
     <main className="app-shell">
       <TopBar
         workflows={projectWorkflows(project)}
         activeWorkflowId={workflow.id}
-        onSelectWorkflow={selectWorkflow}
-        onCreateWorkflow={createWorkflow}
-        onRun={runWorkflow}
+        onSelectWorkflow={projectActions.selectWorkflow}
+        onCreateWorkflow={projectActions.createWorkflow}
+        onRun={editor.runWorkflow}
         status={status}
         canRun={Boolean(workflow)}
       />
@@ -1513,21 +434,21 @@ export function App() {
                 <WorkflowsPanel
                   workflows={projectWorkflows(project)}
                   activeWorkflowId={workflow.id}
-                  onSelect={selectWorkflow}
-                  onCreate={createWorkflow}
+                  onSelect={projectActions.selectWorkflow}
+                  onCreate={projectActions.createWorkflow}
                   onMenu={(workflowId, position) => setMenu({ type: 'workflow', workflowId, x: position.x, y: position.y })}
                   searchQuery={workflowSearchQuery}
                   onSearch={setWorkflowSearchQuery}
                 />
               )}
-              {activeSidePanel === 'nodes' && <NodesPanel onAdd={addNode} />}
+              {activeSidePanel === 'nodes' && <NodesPanel onAdd={editor.addNode} />}
               {activeSidePanel === 'assets' && workflow && (
                 <AssetsPanel
-                  assets={assets}
-                  nodeAssets={nodeAssets}
-                  onImport={importAssets}
-                  onAddImageAsset={addImageAssetNode}
-                  onAddNodeAsset={addNodeAsset}
+                  assets={projectActions.assets}
+                  nodeAssets={projectActions.nodeAssets}
+                  onImport={projectActions.importAssets}
+                  onAddImageAsset={editor.addImageAssetNode}
+                  onAddNodeAsset={editor.addNodeAsset}
                   onMenu={(assetId, position) => setMenu({ type: 'asset', assetId, x: position.x, y: position.y })}
                 />
               )}
@@ -1537,40 +458,36 @@ export function App() {
         )}
         <section className="workspace">
           <FlowEditor
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={updateFlowNodes}
-            onEdgesChange={updateFlowEdges}
-            onSelectNode={setSelectedId}
-            onNodeMenu={openNodeMenu}
-            onBeforeChange={recordHistory}
+            onSelectNode={editor.setSelectedId}
+            onNodeMenu={editor.openNodeMenu}
+            onBeforeChange={editor.recordHistory}
             onPaneMenu={(position, flowPosition) => setMenu({ type: 'pane', x: position.x, y: position.y, flowX: flowPosition.x, flowY: flowPosition.y })}
             onSelectionMenu={(position) => setMenu({ type: 'selection', x: position.x, y: position.y })}
-            onSelectionChangeIds={handleSelectionChange}
-            onFrameDrag={moveFrameContents}
-            onNodeDragHoverFrame={handleNodeDragFrameState}
-            onNodeDragStopCheckFrames={expandFramesForNode}
-            onPaneClickClear={clearSelection}
-            onCommitFlow={() => commitFlowToWorkflow()}
-            onFlowReady={(api) => { flowApiRef.current = api; }}
-            placingNodeId={placingNodeId}
-            onPlacingMove={handlePlacingMove}
-            onPlacingDrop={handlePlacingDrop}
+            onSelectionChangeIds={editor.handleSelectionChange}
+            onFrameDrag={editor.moveFrameContents}
+            onNodeDragHoverFrame={editor.handleNodeDragFrameState}
+            onNodeDragStopCheckFrames={editor.expandFramesForNode}
+            onPaneClickClear={editor.clearSelection}
+            onCommitFlow={() => editor.commitFlowToWorkflow()}
+            onFlowReady={(api) => { editor.flowApiRef.current = api; }}
+            placingNodeId={editor.placingNodeId}
+            onPlacingMove={editor.handlePlacingMove}
+            onPlacingDrop={editor.handlePlacingDrop}
             showMinimap={showMinimap}
           />
         </section>
         {rightOpen && <ResizeHandle side="right" onResize={setRightWidth} min={280} max={520} />}
         {rightOpen ? (
           <InspectorPanel
-            node={selectedNode}
-            onChange={updateNodeData}
+            node={editor.selectedNode}
+            onChange={editor.updateNodeData}
             outputResults={outputResults}
             onClose={() => setRightOpen(false)}
-            connectedHandles={nodes.find((n) => n.id === selectedId)?.data.connectedTargetHandles || []}
-            onDisconnect={disconnectHandle}
-            onAddField={addCustomField}
-            onDynamicFieldChange={updateCustomFieldValue}
-            onOpenAssets={openAssetPickerForField}
+            connectedHandles={editor.nodes.find((n) => n.id === editor.selectedId)?.data.connectedTargetHandles || []}
+            onDisconnect={editor.disconnectHandle}
+            onAddField={editor.addCustomField}
+            onDynamicFieldChange={editor.updateCustomFieldValue}
+            onOpenAssets={editor.openAssetPickerForField}
           />
         ) : (
           <InspectorToggle onOpen={() => setRightOpen(true)} />
@@ -1579,12 +496,12 @@ export function App() {
       {menu && (
         <FloatingContextMenu
           menu={menu}
-          isFrame={menu.type === 'node' && nodes.some((node) => node.id === menu.nodeId && node.type === 'frame')}
+          isFrame={menu.type === 'node' && editor.nodes.some((node) => node.id === menu.nodeId && node.type === 'frame')}
           canDetach={
             menu.type === 'selection'
-              ? selectedNodeIds().some((id) => nodes.some((node) => node.id === id && typeof node.data.workflowNode.data.frameId === 'string'))
+              ? editor.selectedNodeIds().some((id) => editor.nodes.some((node) => node.id === id && typeof node.data.workflowNode.data.frameId === 'string'))
               : menu.type === 'node' &&
-                nodes.some((node) => node.id === menu.nodeId && typeof node.data.workflowNode.data.frameId === 'string')
+                editor.nodes.some((node) => node.id === menu.nodeId && typeof node.data.workflowNode.data.frameId === 'string')
           }
           onClose={() => setMenu(null)}
           onAction={handleMenuAction}
@@ -1595,18 +512,18 @@ export function App() {
           auth={auth}
           fontScale={fontScale}
           onFontScale={setFontScale}
-          historyLimit={historyLimit}
-          onHistoryLimit={setHistoryLimit}
-          undoCount={undoStackRef.current.length}
-          redoCount={redoStackRef.current.length}
+          historyLimit={editor.historyLimit}
+          onHistoryLimit={editor.setHistoryLimit}
+          undoCount={editor.undoCount}
+          redoCount={editor.redoCount}
           onClose={() => closeSettingsRoute()}
         />
       )}
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
       {assetPicker && (
         <AssetsModal
-          assets={assets}
-          onImport={importAssets}
+          assets={projectActions.assets}
+          onImport={projectActions.importAssets}
           onSelect={selectAssetForField}
           onMenu={(assetId, position) => setMenu({ type: 'asset', assetId, x: position.x, y: position.y })}
           onClose={() => setAssetPicker(null)}
@@ -1620,29 +537,16 @@ export function App() {
   );
 }
 
-function normalizeCustomFieldValue(value: unknown): string | number | boolean {
-  if (typeof value === 'number' || typeof value === 'boolean') return value;
-  return value === undefined || value === null ? '' : String(value);
+// ─── Helper functions ────────────────────────────────────────────────────────
+
+function projectWorkflows(project: ImageXProject): Array<{ id: string; title: string }> {
+  const workflows = project.metadata.workflows?.length
+    ? project.metadata.workflows
+    : [{ id: project.workflow.id, title: project.workflow.name, file: project.metadata.workflowFile }];
+  return workflows.map((workflow) => ({ id: workflow.id, title: workflow.title }));
 }
 
-function createCustomFieldDefinition(kind: CustomFieldKind): CustomFieldDefinition {
-  const id = `field-${crypto.randomUUID().slice(0, 8)}`;
-  switch (kind) {
-    case 'textarea':
-      return { id, label: 'Text', kind, value: '' };
-    case 'select':
-      return { id, label: 'Selector', kind, value: 'option 1', options: ['option 1', 'option 2'] };
-    case 'slider':
-      return { id, label: 'Slider', kind, value: 0.5, min: 0, max: 1, step: 0.05 };
-    case 'number':
-      return { id, label: 'Number', kind, value: 0 };
-    case 'toggle':
-      return { id, label: 'Toggle', kind, value: false };
-    case 'text':
-    default:
-      return { id, label: 'Text', kind: 'text', value: '' };
-  }
-}
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
 function ResizeHandle({
   side,
@@ -2007,6 +911,7 @@ function SettingsModal({
   onClose: () => void;
 }) {
   const handleBackdrop = useDismiss(onClose);
+  const [previewRes, setPreviewRes] = useState(() => Number(localStorage.getItem('imagex.previewResolution')) || 1024);
   return (
     <div className="prompt-overlay-backdrop" role="dialog" aria-modal="true" onClick={handleBackdrop}>
       <section className="settings-modal">
@@ -2029,6 +934,25 @@ function SettingsModal({
             <span>Font scale</span>
             <Slider min={0.5} max={3} step={0.1} value={[fontScale]} onValueChange={(value) => onFontScale(value[0] ?? fontScale)} />
             <strong>{fontScale.toFixed(2)}x</strong>
+          </label>
+          <label className="settings-row">
+            <span>Preview resolution</span>
+            <Select
+              value={String(previewRes)}
+              onValueChange={(val) => { const v = Number(val); setPreviewRes(v); setPreviewResolution(v); }}
+            >
+              <SelectTrigger size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" sideOffset={4} style={{ zIndex: 9999 }}>
+                <SelectItem value="512">512px (Fast)</SelectItem>
+                <SelectItem value="768">768px</SelectItem>
+                <SelectItem value="1024">1024px (Default)</SelectItem>
+                <SelectItem value="1280">1280px</SelectItem>
+                <SelectItem value="1536">1536px</SelectItem>
+                <SelectItem value="2048">2048px (Quality)</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
           <label className="settings-row">
             <span>History size</span>
@@ -2094,50 +1018,4 @@ function formatJsonPrompt(prompt: string): string {
   } catch {
     return prompt;
   }
-}
-
-function clampHistoryLimit(value: number): number {
-  if (!Number.isFinite(value)) return 50;
-  return Math.max(10, Math.min(200, Math.round(value)));
-}
-
-function pushProjectRoute(project: ImageXProject) {
-  const path = projectPath(project);
-  if (window.location.pathname !== path) {
-    window.history.pushState({}, '', path);
-  }
-}
-
-function projectPath(project: ImageXProject): string {
-  return `/projects/${slugify(project.metadata.title)}--${project.metadata.id}`;
-}
-
-function projectWorkflows(project: ImageXProject): Array<{ id: string; title: string }> {
-  const workflows = project.metadata.workflows?.length
-    ? project.metadata.workflows
-    : [{ id: project.workflow.id, title: project.workflow.name, file: project.metadata.workflowFile }];
-  return workflows.map((workflow) => ({ id: workflow.id, title: workflow.title }));
-}
-
-function projectIdFromPath(pathname: string): string | null {
-  const match = pathname.match(/^\/projects\/([^/]+)\/?$/);
-  if (!match) return null;
-  const segment = decodeURIComponent(match[1] || '');
-  return segment.includes('--') ? segment.slice(segment.lastIndexOf('--') + 2) : segment;
-}
-
-async function fileToBase64(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]!);
-  return btoa(binary);
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60) || 'project';
 }

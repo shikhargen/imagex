@@ -1,0 +1,452 @@
+import { useState } from 'react';
+import type {
+  ImageXAsset,
+  ImageXEdge,
+  ImageXNode,
+  ImageXNodeAsset,
+  ImageXProject,
+  ImageXProjectSummary,
+  ImageXTemplateSummary,
+  ImageXWorkflow,
+  OutputNodeResult,
+} from '../../../shared/types.js';
+import { cloneWorkflowNode } from '../graph/operations.js';
+import { nodeMeta } from '../flow/meta.js';
+import type { UiEdge, UiNode } from '../flow/types.js';
+import { fileToBase64 } from '../utils/files.js';
+import { pushProjectRoute } from '../utils/routing.js';
+import type { ConfirmDialogState, TextDialogState } from './types.js';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export type ProjectActionsDeps = {
+  project: ImageXProject | null;
+  setProject: (p: ImageXProject | null) => void;
+  workflow: ImageXWorkflow | null;
+  setStatus: (s: string) => void;
+  showNotification: (msg: string) => void;
+  // From useEditorActions:
+  loadWorkflow: (wf: ImageXWorkflow, selectedId: string | null) => void;
+  clearHistory: () => void;
+  recordHistory: () => void;
+  syncLatestWorkflow: () => ImageXWorkflow | null;
+  nodesRef: React.MutableRefObject<UiNode[]>;
+  edgesRef: React.MutableRefObject<UiEdge[]>;
+  // For dialogs:
+  setTextDialog: (d: TextDialogState) => void;
+  setConfirmDialog: (d: ConfirmDialogState) => void;
+  // Additional UI state:
+  setShowNewProject: (show: boolean) => void;
+  setActiveSidePanel: (panel: string | null) => void;
+  setOutputResults: (r: Map<string, OutputNodeResult>) => void;
+};
+
+// ─── Hook ────────────────────────────────────────────────────────────────────
+
+export function useProjectActions(deps: ProjectActionsDeps) {
+  const {
+    project,
+    setProject,
+    workflow,
+    setStatus,
+    showNotification,
+    loadWorkflow,
+    clearHistory,
+    recordHistory,
+    syncLatestWorkflow,
+    nodesRef,
+    edgesRef,
+    setTextDialog,
+    setConfirmDialog,
+    setShowNewProject,
+    setActiveSidePanel,
+    setOutputResults,
+  } = deps;
+
+  // ─── State ─────────────────────────────────────────────────────────────────
+
+  const [projects, setProjects] = useState<ImageXProjectSummary[]>([]);
+  const [templates, setTemplates] = useState<ImageXTemplateSummary[]>([]);
+  const [assets, setAssets] = useState<ImageXAsset[]>([]);
+  const [nodeAssets, setNodeAssets] = useState<ImageXNodeAsset[]>([]);
+
+  // ─── Internal helpers ──────────────────────────────────────────────────────
+
+  function showDashboard(options: { navigate?: boolean; replace?: boolean } = {}) {
+    clearHistory();
+    setProject(null);
+    setOutputResults(new Map());
+    setStatus('Dashboard');
+    if (options.navigate !== false && window.location.pathname !== '/') {
+      if (options.replace) window.history.replaceState({}, '', '/');
+      else window.history.pushState({}, '', '/');
+    }
+  }
+
+  function loadProject(nextProject: ImageXProject) {
+    clearHistory();
+    setProject(nextProject);
+    loadWorkflow(nextProject.workflow, nextProject.workflow.nodes[0]?.id ?? null);
+    void refreshAssets(nextProject.metadata.id);
+    void refreshNodeAssets(nextProject.metadata.id);
+    setOutputResults(new Map());
+    setStatus('Ready');
+  }
+
+  function nodeAssetPayload(rootNodeId: string): { rootNodeId: string; nodes: ImageXNode[]; edges: ImageXEdge[] } | null {
+    const root = nodesRef.current.find((node) => node.id === rootNodeId);
+    if (!root) return null;
+    const included = new Set<string>([rootNodeId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const edge of edgesRef.current) {
+        if (!edge.target || !edge.source) continue;
+        if (included.has(edge.target) && !included.has(edge.source)) {
+          included.add(edge.source);
+          changed = true;
+        }
+      }
+    }
+    const nodes = nodesRef.current
+      .filter((node) => included.has(node.id))
+      .map((node) => cloneWorkflowNode(node.data.workflowNode));
+    const edges = edgesRef.current
+      .filter((edge) => included.has(edge.source) && included.has(edge.target))
+      .map((edge) => {
+        const nextEdge: ImageXEdge = { id: edge.id, source: edge.source, target: edge.target };
+        if (edge.sourceHandle) nextEdge.sourceHandle = edge.sourceHandle;
+        if (edge.targetHandle) nextEdge.targetHandle = edge.targetHandle;
+        return nextEdge;
+      });
+    return { rootNodeId, nodes, edges };
+  }
+
+  // ─── Bootstrap ─────────────────────────────────────────────────────────────
+
+  async function bootstrap() {
+    const [projectsResponse, templatesResponse] = await Promise.all([
+      fetch('/api/projects'),
+      fetch('/api/templates'),
+    ]);
+    const projectData = (await projectsResponse.json()) as { projects: ImageXProjectSummary[] };
+    const templateData = (await templatesResponse.json()) as { templates: ImageXTemplateSummary[] };
+    setProjects(projectData.projects);
+    setTemplates(templateData.templates);
+  }
+
+  // ─── Project CRUD ──────────────────────────────────────────────────────────
+
+  async function refreshProjects() {
+    const response = await fetch('/api/projects');
+    const data = (await response.json()) as { projects: ImageXProjectSummary[] };
+    setProjects(data.projects);
+  }
+
+  async function openProject(projectId: string, options: { navigate?: boolean } = {}) {
+    setStatus('Opening project...');
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ error: response.statusText }));
+      showDashboard({ navigate: true, replace: true });
+      showNotification(body.error || `Project not found: ${projectId}`);
+      return;
+    }
+    const data = (await response.json()) as { project: ImageXProject };
+    loadProject(data.project);
+    if (options.navigate !== false) pushProjectRoute(data.project);
+  }
+
+  async function createProjectFromModal(input: { title: string; description: string; templateId: string }) {
+    setStatus('Creating project...');
+    const response = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ error: response.statusText }));
+      setStatus(body.error || 'Failed to create project');
+      return;
+    }
+    const data = (await response.json()) as { project: ImageXProject };
+    setShowNewProject(false);
+    await refreshProjects();
+    loadProject(data.project);
+    pushProjectRoute(data.project);
+  }
+
+  function closeProject() {
+    showDashboard({ navigate: true });
+    void refreshProjects();
+  }
+
+  // ─── Workflow CRUD ─────────────────────────────────────────────────────────
+
+  async function selectWorkflow(workflowId: string) {
+    if (!project || workflow?.id === workflowId) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflows/${encodeURIComponent(workflowId)}`);
+    if (!response.ok) {
+      showNotification('Workflow not found.');
+      return;
+    }
+    const data = (await response.json()) as { project: ImageXProject };
+    loadProject(data.project);
+  }
+
+  async function createWorkflow() {
+    if (!project) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflows`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Untitled Workflow' }),
+    });
+    if (!response.ok) {
+      showNotification('Failed to create workflow.');
+      return;
+    }
+    const data = (await response.json()) as { project: ImageXProject };
+    loadProject(data.project);
+  }
+
+  async function deleteWorkflow(workflowId: string) {
+    if (!project) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflows/${encodeURIComponent(workflowId)}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ error: 'Failed to delete workflow.' }));
+      showNotification(body.error || 'Failed to delete workflow.');
+      return;
+    }
+    const data = (await response.json()) as { project: ImageXProject };
+    loadProject(data.project);
+  }
+
+  // ─── Workflow rename ───────────────────────────────────────────────────────
+
+  function renameWorkflowFromMenu(workflowId: string) {
+    if (!project) return;
+    const entry = project.metadata.workflows?.find((candidate) => candidate.id === workflowId);
+    setTextDialog({
+      type: 'rename-workflow',
+      id: workflowId,
+      title: 'Rename workflow',
+      label: 'Name',
+      initialValue: entry?.title || workflow?.name || 'Untitled Workflow',
+    });
+  }
+
+  async function submitRenameWorkflow(workflowId: string, name: string) {
+    if (!project) return;
+    if (workflow?.id === workflowId) {
+      // Rename the currently loaded workflow in-place
+      recordHistory();
+      const synced = syncLatestWorkflow();
+      if (!synced) return;
+      const renamed = { ...synced, name };
+      loadWorkflow(renamed, null);
+      const nextMetadata = { ...project.metadata };
+      if (nextMetadata.workflows?.length) {
+        nextMetadata.workflows = nextMetadata.workflows.map((w) =>
+          w.id === workflowId ? { ...w, title: name } : w
+        );
+      }
+      setProject({ ...project, metadata: nextMetadata, workflow: renamed });
+      return;
+    }
+    // Rename a non-active workflow via API
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflows/${encodeURIComponent(workflowId)}`);
+    if (!response.ok) return;
+    const data = (await response.json()) as { project: ImageXProject };
+    const renamed = { ...data.project.workflow, name };
+    const saveResponse = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflow`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workflow: renamed }),
+    });
+    if (saveResponse.ok) {
+      const saved = (await saveResponse.json()) as { project: ImageXProject };
+      setProject({ ...project, metadata: saved.project.metadata });
+    }
+  }
+
+  // ─── Project rename / delete ───────────────────────────────────────────────
+
+  function renameProjectFromMenu(projectId: string) {
+    const item = projects.find((candidate) => candidate.id === projectId);
+    setTextDialog({
+      type: 'rename-project',
+      id: projectId,
+      title: 'Rename project',
+      label: 'Name',
+      initialValue: item?.title || 'Untitled Project',
+    });
+  }
+
+  async function submitRenameProject(projectId: string, name: string) {
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: name }),
+    });
+    if (response.ok) {
+      const data = (await response.json()) as { project: ImageXProject };
+      await refreshProjects();
+      if (project?.metadata.id === projectId) {
+        setProject(data.project);
+      }
+    }
+  }
+
+  function deleteProjectFromMenu(projectId: string) {
+    const item = projects.find((candidate) => candidate.id === projectId);
+    setConfirmDialog({
+      type: 'delete-project',
+      id: projectId,
+      title: 'Delete project',
+      message: `Delete "${item?.title || 'this project'}" and all of its files? This cannot be undone.`,
+      confirmLabel: 'Delete Project',
+    });
+  }
+
+  async function submitDeleteProject(projectId: string) {
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+    if (response.ok) {
+      if (project?.metadata.id === projectId) showDashboard({ navigate: true });
+      await refreshProjects();
+    }
+  }
+
+  // ─── Assets ────────────────────────────────────────────────────────────────
+
+  async function refreshAssets(projectId = project?.metadata.id) {
+    if (!projectId) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/assets`);
+    if (!response.ok) return;
+    const data = (await response.json()) as { assets: ImageXAsset[] };
+    setAssets(data.assets);
+  }
+
+  async function refreshNodeAssets(projectId = project?.metadata.id) {
+    if (!projectId) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/node-assets`);
+    if (!response.ok) return;
+    const data = (await response.json()) as { assets: ImageXNodeAsset[] };
+    setNodeAssets(data.assets);
+  }
+
+  async function importAssets(files: FileList | null) {
+    if (!project || !files?.length) return;
+    let nextAssets = assets;
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) continue;
+      const dataBase64 = await fileToBase64(file);
+      const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/assets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, mimeType: file.type, dataBase64 }),
+      });
+      if (response.ok) {
+        const data = (await response.json()) as { assets: ImageXAsset[] };
+        nextAssets = data.assets;
+      }
+    }
+    setAssets(nextAssets);
+  }
+
+  function renameAsset(assetId: string) {
+    const asset = assets.find((candidate) => candidate.id === assetId);
+    setTextDialog({
+      type: 'rename-asset',
+      id: assetId,
+      title: 'Rename asset',
+      label: 'Name',
+      initialValue: asset?.name || 'Asset',
+    });
+  }
+
+  async function submitRenameAsset(assetId: string, name: string) {
+    if (!project) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/assets/${encodeURIComponent(assetId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (response.ok) setAssets(((await response.json()) as { assets: ImageXAsset[] }).assets);
+  }
+
+  async function deleteAsset(assetId: string) {
+    if (!project) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/assets/${encodeURIComponent(assetId)}`, {
+      method: 'DELETE',
+    });
+    if (response.ok) setAssets(((await response.json()) as { assets: ImageXAsset[] }).assets);
+  }
+
+  // ─── Node assets ───────────────────────────────────────────────────────────
+
+  function openCreateNodeAssetDialog(nodeId: string) {
+    const node = nodesRef.current.find((candidate) => candidate.id === nodeId)?.data.workflowNode;
+    if (!node || node.type === 'frame') return;
+    const meta = nodeMeta[node.type];
+    const defaultName =
+      (typeof node.data.name === 'string' && node.data.name.trim()) ||
+      (typeof node.data.title === 'string' && node.data.title.trim()) ||
+      meta.label;
+    setTextDialog({
+      type: 'create-node-asset',
+      id: nodeId,
+      title: 'Create node asset',
+      label: 'Name',
+      initialValue: defaultName,
+    });
+  }
+
+  async function createNodeAssetFromNode(nodeId: string, name: string) {
+    if (!project) return;
+    const payload = nodeAssetPayload(nodeId);
+    if (!payload) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/node-assets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, ...payload }),
+    });
+    if (response.ok) {
+      const data = (await response.json()) as { assets: ImageXNodeAsset[] };
+      setNodeAssets(data.assets);
+      setActiveSidePanel('assets');
+    }
+  }
+
+  // ─── Return ────────────────────────────────────────────────────────────────
+
+  return {
+    projects,
+    templates,
+    assets,
+    nodeAssets,
+    bootstrap,
+    refreshProjects,
+    refreshAssets,
+    refreshNodeAssets,
+    openProject,
+    closeProject,
+    createProjectFromModal,
+    selectWorkflow,
+    createWorkflow,
+    deleteWorkflow,
+    importAssets,
+    renameAsset,
+    submitRenameAsset,
+    deleteAsset,
+    renameWorkflowFromMenu,
+    submitRenameWorkflow,
+    renameProjectFromMenu,
+    submitRenameProject,
+    deleteProjectFromMenu,
+    submitDeleteProject,
+    openCreateNodeAssetDialog,
+    createNodeAssetFromNode,
+  };
+}

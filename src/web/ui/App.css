@@ -661,3 +661,7 @@
   border-color: var(--ui-border-accent);
   box-shadow: 0 0 0 1px var(--ui-border-accent) inset;
 }
+
+.settings-row [data-slot="select-trigger"] {
+  width: 100%;
+}

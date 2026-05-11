@@ -7,6 +7,9 @@ import {
   File,
   RotateCw,
   Sparkles,
+  Crop,
+  Droplets,
+  Download,
   type LucideIcon,
 } from 'lucide-react';
 import type { NodeType, NodeCategory } from '../../../shared/types.js';
@@ -70,6 +73,27 @@ export const nodeMeta: Record<NodeType, NodeMeta> = {
     accent: '#fb923c',
     icon: RotateCw,
     description: 'Rotate and flip image',
+    category: 'image-editing',
+  },
+  crop: {
+    label: 'Crop',
+    accent: '#10b981',
+    icon: Crop,
+    description: 'Crop image region',
+    category: 'image-editing',
+  },
+  blur: {
+    label: 'Blur',
+    accent: '#8b5cf6',
+    icon: Droplets,
+    description: 'Apply blur effect',
+    category: 'image-editing',
+  },
+  download: {
+    label: 'Download',
+    accent: '#22c55e',
+    icon: Download,
+    description: 'Download processed image',
     category: 'image-editing',
   },
   // ─── Layout ──────────────────────────────────────────────────────────────────

@@ -223,6 +223,12 @@ function defaultDataFor(type: NodeType): Record<string, unknown> {
         flipH: false,
         flipV: false,
       };
+    case 'crop':
+      return { title: 'Crop', x: 0, y: 0, cropWidth: 0, cropHeight: 0 };
+    case 'blur':
+      return { title: 'Blur', radius: 0 };
+    case 'download':
+      return { title: 'Download' };
     case 'frame':
       return {
         title: 'Frame',
