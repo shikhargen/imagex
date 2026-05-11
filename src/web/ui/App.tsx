@@ -488,6 +488,7 @@ export function App() {
             onAddField={editor.addCustomField}
             onDynamicFieldChange={editor.updateCustomFieldValue}
             onOpenAssets={editor.openAssetPickerForField}
+            onShowPrompt={(nodeId) => { void handleShowCompiledPrompt(nodeId); }}
           />
         ) : (
           <InspectorToggle onOpen={() => setRightOpen(true)} />

@@ -9,7 +9,7 @@ type CodexImage = {
   revisedPrompt?: string;
 };
 
-const codexResponsesUrl = 'https://chatgpt.com/backend-api/codex/responses';
+const codexResponsesUrl = process.env['CODEX_API_BASE'] || 'https://chatgpt.com/backend-api/codex/responses';
 const codexResponsesModel = 'gpt-5.5';
 
 export async function generateCodexImages(

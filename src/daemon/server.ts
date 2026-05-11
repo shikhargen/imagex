@@ -4,7 +4,7 @@ import { access, readFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import sharp from 'sharp';
+import photon from '@silvia-odwyer/photon-node';
 
 function log(scope: string, message: string, extra?: Record<string, unknown>): void {
   const ts = new Date().toISOString();
@@ -322,22 +322,19 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
   }
 
   /**
-   * Apply image editing transforms (rotate, flip, color balance) to resolved references.
-   * Traces the workflow graph to find editing nodes between image sources and the output node.
+   * Apply image editing transforms to resolved references using photon-node (same WASM engine as frontend).
+   * Traces the workflow graph to find editing nodes between image sources and the output node,
+   * then processes each node's step sequentially — identical to the frontend's applyWasmStep.
    */
   async function applyImageEdits(
     references: Array<{ name: string; role: string; notes: string; position: string; dataUrl: string }>,
     workflow: ImageXWorkflow,
     outputNodeId: string
   ): Promise<Array<{ name: string; role: string; notes: string; position: string; dataUrl: string }>> {
-    // Build a map of which editing nodes affect which image paths
     const nodesById = new Map(workflow.nodes.map((n) => [n.id, n]));
-
-    // For each reference, trace backwards from outputNode to find editing nodes in its path
     const result: Array<{ name: string; role: string; notes: string; position: string; dataUrl: string }> = [];
 
     for (const ref of references) {
-      // Find the source node for this reference (by matching its path/name)
       const editingNodes = findEditingNodesForRef(ref.name, workflow, outputNodeId, nodesById);
 
       if (editingNodes.length === 0) {
@@ -345,34 +342,21 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
         continue;
       }
 
-      // Apply transforms in order (from source towards output)
-      let imageBuffer = Buffer.from(ref.dataUrl.split(',')[1] || '', 'base64');
-      let pipeline = sharp(imageBuffer);
+      // Load image into photon
+      const b64Data = ref.dataUrl.split(',')[1] || '';
+      let img = photon.PhotonImage.new_from_base64(b64Data);
 
+      // Process node-by-node (same operations as frontend wasmEngine applyWasmStep)
       for (const editNode of editingNodes) {
-        if (editNode.type === 'rotate-flip') {
-          const rotate = ((Number(editNode.data.rotate) || 0) % 360 + 360) % 360;
-          const flipH = Boolean(editNode.data.flipH);
-          const flipV = Boolean(editNode.data.flipV);
-          if (rotate !== 0) pipeline = pipeline.rotate(rotate);
-          if (flipH) pipeline = pipeline.flop();
-          if (flipV) pipeline = pipeline.flip();
-        } else if (editNode.type === 'color-balance') {
-          const red = Number(editNode.data.red) || 0;
-          const green = Number(editNode.data.green) || 0;
-          const blue = Number(editNode.data.blue) || 0;
-          if (red !== 0 || green !== 0 || blue !== 0) {
-            // Apply color shift using linear transform
-            pipeline = pipeline.linear(
-              [1 + red / 100, 1 + green / 100, 1 + blue / 100],
-              [0, 0, 0]
-            );
-          }
-        }
+        img = applyNodeStep(img, editNode);
       }
 
-      const outputBuffer = await pipeline.png().toBuffer();
-      const dataUrl = `data:image/png;base64,${outputBuffer.toString('base64')}`;
+      // Export back to base64
+      const outputBase64 = img.get_base64();
+      const outputData = outputBase64.replace(/^data:image\/\w+;base64,/, '');
+      img.free();
+
+      const dataUrl = `data:image/png;base64,${outputData}`;
       result.push({ ...ref, dataUrl });
     }
 
@@ -380,7 +364,65 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
   }
 
   /**
-   * Find editing nodes (rotate-flip, color-balance) in the path between an image source and the output node.
+   * Apply a single editing node's operation to a PhotonImage.
+   * Mirrors the frontend's applyWasmStep exactly (scaleFactor=1 for full resolution).
+   */
+  function applyNodeStep(img: InstanceType<typeof photon.PhotonImage>, node: ImageXNode): InstanceType<typeof photon.PhotonImage> {
+    switch (node.type) {
+      case 'rotate-flip': {
+        const angle = ((Number(node.data.rotate) || 0) % 360 + 360) % 360;
+        const doFlipH = Boolean(node.data.flipH);
+        const doFlipV = Boolean(node.data.flipV);
+        if (angle !== 0) {
+          const rotated = photon.rotate(img, angle);
+          img.free();
+          img = rotated;
+        }
+        if (doFlipH) photon.fliph(img);
+        if (doFlipV) photon.flipv(img);
+        return img;
+      }
+
+      case 'blur': {
+        const radius = Number(node.data.radius) || 0;
+        if (radius > 0) photon.gaussian_blur(img, radius);
+        return img;
+      }
+
+      case 'color-balance': {
+        const r = Number(node.data.red) || 0;
+        const g = Number(node.data.green) || 0;
+        const b = Number(node.data.blue) || 0;
+        if (r !== 0 || g !== 0 || b !== 0) {
+          photon.alter_channels(img, r, g, b);
+        }
+        return img;
+      }
+
+      case 'crop': {
+        const x = Math.round(Number(node.data.x) || 0);
+        const y = Math.round(Number(node.data.y) || 0);
+        const w = Math.round(Number(node.data.cropWidth) || 0);
+        const h = Math.round(Number(node.data.cropHeight) || 0);
+        if (w <= 0 || h <= 0) return img;
+        const imgW = img.get_width();
+        const imgH = img.get_height();
+        if (x === 0 && y === 0 && w >= imgW && h >= imgH) return img;
+        const x2 = Math.min(x + w, imgW);
+        const y2 = Math.min(y + h, imgH);
+        if (x2 <= x || y2 <= y) return img;
+        const cropped = photon.crop(img, Math.max(0, x), Math.max(0, y), x2, y2);
+        img.free();
+        return cropped;
+      }
+
+      default:
+        return img;
+    }
+  }
+
+  /**
+   * Find editing nodes in the path between an image source and the output node.
    */
   function findEditingNodesForRef(
     refName: string,
@@ -388,8 +430,7 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     outputNodeId: string,
     nodesById: Map<string, ImageXNode>
   ): ImageXNode[] {
-    // Trace from outputNode backwards to find the path that includes this reference
-    // Collect editing nodes along the way
+    const editingTypes = new Set(['rotate-flip', 'color-balance', 'crop', 'blur']);
     const editingNodes: ImageXNode[] = [];
 
     function traceBack(nodeId: string, visited: Set<string>): boolean {
@@ -399,7 +440,6 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
       const node = nodesById.get(nodeId);
       if (!node) return false;
 
-      // Check if this node is the image source matching our reference
       if (node.type === 'image') {
         const assetUrl = typeof node.data.assetUrl === 'string' ? node.data.assetUrl : '';
         const assetName = typeof node.data.assetName === 'string' ? node.data.assetName : '';
@@ -408,14 +448,12 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
         }
       }
 
-      // Trace upstream
       for (const edge of workflow.edges) {
         if (edge.target !== nodeId) continue;
         const found = traceBack(edge.source, visited);
         if (found) {
-          // This node is on the path - if it's an editing node, collect it
-          if (node.type === 'rotate-flip' || node.type === 'color-balance') {
-            editingNodes.unshift(node); // unshift to maintain source-to-output order
+          if (editingTypes.has(node.type)) {
+            editingNodes.push(node);
           }
           return true;
         }

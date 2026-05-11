@@ -12,6 +12,8 @@ export type NodeFieldsProps = {
   hasAssetPicker?: boolean | undefined;
   /** Called when a built-in field value changes */
   onFieldChange: (nodeId: string, fieldId: string, value: unknown) => void;
+  /** Called on slider release / commit for built-in fields (ongoing=false trigger) */
+  onFieldCommit?: ((nodeId: string, fieldId: string, value: unknown) => void) | undefined;
   /** Called when a dynamic field value changes */
   onDynamicFieldChange?: ((nodeId: string, fieldId: string, value: unknown) => void) | undefined;
   /** Called to update the entire fields array (for rename/remove) */
@@ -36,6 +38,7 @@ export function NodeFields({
   addableFields,
   hasAssetPicker,
   onFieldChange,
+  onFieldCommit,
   onDynamicFieldChange,
   onFieldsChange,
   onAddField,
@@ -125,6 +128,7 @@ export function NodeFields({
                       onFieldChange(node.id, field.id, value);
                     }
                   }}
+                  onCommit={!isDynamic && onFieldCommit ? (value) => onFieldCommit(node.id, field.id, value) : undefined}
                   labelEditing={isRenaming}
                   onLabelCommit={(newLabel) => {
                     const updated = dynamicFields.map((f) =>

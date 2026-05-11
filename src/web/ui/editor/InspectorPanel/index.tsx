@@ -2,6 +2,7 @@ import { Menu, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ImageXNode, OutputNodeResult } from '../../../../shared/types.js';
 import { nodeMeta } from '../../flow/meta.js';
+import { NodeContent } from '../../flow/nodes/NodeContent.js';
 import { NodeFields } from '../../flow/nodes/parts/NodeFields.js';
 import type { UpdateNodeData } from '../../flow/types.js';
 import './styles.css';
@@ -13,6 +14,9 @@ const addableFieldsMap: Record<string, string[]> = {
   file: ['text'],
 };
 
+// Node types that use NodeContent (have custom body: preview, controls, etc.)
+const contentNodeTypes = new Set(['codex-output', 'rotate-flip', 'crop', 'color-balance', 'blur', 'download']);
+
 export function InspectorPanel({
   node,
   onChange,
@@ -23,6 +27,7 @@ export function InspectorPanel({
   onAddField,
   onDynamicFieldChange,
   onOpenAssets,
+  onShowPrompt,
 }: {
   node: ImageXNode | null;
   onChange: UpdateNodeData;
@@ -33,6 +38,7 @@ export function InspectorPanel({
   onAddField?: (nodeId: string, kind: string) => void;
   onDynamicFieldChange?: (nodeId: string, fieldId: string, value: unknown) => void;
   onOpenAssets?: (nodeId: string, fieldId: string) => void;
+  onShowPrompt?: (nodeId: string) => void;
 }) {
   return (
     <aside className="inspector">
@@ -49,18 +55,31 @@ export function InspectorPanel({
         </button>
       </header>
       {node ? (
-        <NodeFields
-          node={node}
-          connectedHandles={connectedHandles}
-          addableFields={addableFieldsMap[node.type] || []}
-          hasAssetPicker={node.type === 'image'}
-          onFieldChange={onChange}
-          onDynamicFieldChange={onDynamicFieldChange}
-          onFieldsChange={(nodeId, fields) => onChange(nodeId, 'fields', fields)}
-          onAddField={onAddField}
-          onDisconnect={onDisconnect}
-          onOpenAssets={onOpenAssets}
-        />
+        contentNodeTypes.has(node.type) ? (
+          // Non-primitive nodes: render the full node body (preview + controls)
+          <div className="inspector-content">
+            <NodeContent
+              node={node}
+              onChange={onChange}
+              onShowPrompt={onShowPrompt}
+              connectedHandles={connectedHandles}
+            />
+          </div>
+        ) : (
+          // Primitive nodes: render fields with handles/add support
+          <NodeFields
+            node={node}
+            connectedHandles={connectedHandles}
+            addableFields={addableFieldsMap[node.type] || []}
+            hasAssetPicker={node.type === 'image'}
+            onFieldChange={onChange}
+            onDynamicFieldChange={onDynamicFieldChange}
+            onFieldsChange={(nodeId, fields) => onChange(nodeId, 'fields', fields)}
+            onAddField={onAddField}
+            onDisconnect={onDisconnect}
+            onOpenAssets={onOpenAssets}
+          />
+        )
       ) : (
         <p className="muted">Select a node to inspect its properties.</p>
       )}

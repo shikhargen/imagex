@@ -14,11 +14,12 @@ export function compileWorkflow(workflow: ImageXWorkflow, resolvedImages?: Resol
 
   const compiledOutputs = outputs.map((output) => compileCodexOutput(output, context, resolvedImages)).filter(isMeaningfulObject);
 
+  const primaryOutput = outputs[0];
+  const count = numberField(primaryOutput, 'count', 1, 1, 4);
+
   const rawPrompt = {
     useCase: workflow.settings.useCase || 'stylized-concept',
-    assetType: 'imagex generated workflow output',
-    instruction:
-      'Generate one image from this structured workflow. Treat node fields as reusable creative components. Preserve explicit user values and do not invent unrelated logos, watermarks, or extra text.',
+    instruction: imageCountInstruction(count),
     outputs: compiledOutputs,
   };
 
@@ -27,7 +28,6 @@ export function compileWorkflow(workflow: ImageXWorkflow, resolvedImages?: Resol
   const promptJson = assignImagePositions(rawPrompt, nextIndex, references);
   const prompt = JSON.stringify(promptJson, null, 2);
 
-  const primaryOutput = outputs[0];
   return {
     prompt,
     options: buildOptions(prompt, primaryOutput, workflow.name, references),
@@ -42,11 +42,11 @@ export function compileOutputNodeWorkflow(workflow: ImageXWorkflow, nodeId: stri
   const compiled = compileCodexOutput(output, context, resolvedImages);
   if (!isMeaningfulObject(compiled)) return null;
 
+  const count = numberField(output, 'count', 1, 1, 4);
+
   const rawPrompt = {
     useCase: workflow.settings.useCase || 'stylized-concept',
-    assetType: 'imagex generated workflow output',
-    instruction:
-      'Generate one image from this structured workflow. Treat node fields as reusable creative components. Preserve explicit user values and do not invent unrelated logos, watermarks, or extra text.',
+    instruction: imageCountInstruction(count),
     outputs: [compiled],
   };
 
@@ -310,13 +310,6 @@ function compileCodexOutput(output: ImageXNode, context: GraphContext, resolvedI
 
   return {
     request: inputs.length === 1 ? inputs[0] : inputs,
-    settings: {
-      size: output.data['size'] ?? '1024x1024',
-      quality: output.data['quality'] ?? 'auto',
-      format: output.data['format'] ?? 'png',
-      background: output.data['background'] ?? 'auto',
-      count: output.data['count'] ?? 1,
-    },
   };
 }
 
@@ -370,6 +363,11 @@ function buildOptions(prompt: string, output: ImageXNode | undefined, workflowNa
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function imageCountInstruction(count: number): string {
+  const n = count === 1 ? '1 image' : `${count} images`;
+  return `Generate ${n} based on the following structured description. Preserve explicit user values and do not invent unrelated logos, watermarks, or extra text.`;
+}
 
 const defaultLabels: Record<string, string> = {
   prompt: 'Prompt',
