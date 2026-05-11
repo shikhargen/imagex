@@ -216,8 +216,8 @@
 
 /* Handles */
 .ix-handle {
-  width: 0.778rem;
-  height: 0.778rem;
+  width: 1rem;
+  height: 1rem;
   border: 2px solid var(--ui-bg-panel);
   border-radius: 50%;
   background: var(--node-accent);

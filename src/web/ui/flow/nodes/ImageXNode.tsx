@@ -1,9 +1,9 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Eye, MoreHorizontal, Plus, X } from 'lucide-react';
+import { Eye, MoreHorizontal } from 'lucide-react';
 import { memo, useState, type CSSProperties, type MouseEvent } from 'react';
-import type { CustomFieldDefinition } from '../../../../shared/types.js';
+
 import { FieldControl } from '../fields/FieldControl.js';
-import { customFieldValue, editableFieldDefinitionsFor, builtInFieldDefinitions } from '../fields/definitions.js';
+import { customFieldValue, editableFieldDefinitionsFor } from '../fields/definitions.js';
 import { nodeMeta } from '../meta.js';
 import { inputPortsFor, outputPortsFor } from '../ports.js';
 import type { UiNode } from '../types.js';
@@ -200,37 +200,29 @@ function LLMOutputNode({ data, selected }: Props) {
         </button>
       </header>
 
-      {/* Input ports */}
-      <div className="ix-node-ports">
-        <div className="ix-port-column">
-          {inputs.map((port) => (
-            <div key={port.id} className="ix-port-row input">
-              <Handle
-                id={port.id}
-                className={`ix-handle ix-handle-in ix-port-${port.kind}`}
-                type="target"
-                position={Position.Left}
-                isConnectableStart={false}
-              />
-              <span>{port.label}</span>
-            </div>
-          ))}
-        </div>
-        <div className="ix-port-column output">
-          {outputs.map((port) => (
-            <div key={port.id} className="ix-port-row output">
-              <span>{port.label}</span>
-              <Handle
-                id={port.id}
-                className={`ix-handle ix-handle-out ix-port-${port.kind}`}
-                type="source"
-                position={Position.Right}
-                isConnectableEnd={false}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Input/Output handles - centered, no labels */}
+      {inputs.map((port) => (
+        <Handle
+          key={port.id}
+          id={port.id}
+          className={`ix-handle ix-handle-in ix-port-${port.kind}`}
+          type="target"
+          position={Position.Left}
+          isConnectableStart={false}
+          style={{ top: '50%' }}
+        />
+      ))}
+      {outputs.map((port) => (
+        <Handle
+          key={port.id}
+          id={port.id}
+          className={`ix-handle ix-handle-out ix-port-${port.kind}`}
+          type="source"
+          position={Position.Right}
+          isConnectableEnd={false}
+          style={{ top: '50%' }}
+        />
+      ))}
 
       {/* Preview */}
       <div className="ix-output-preview">

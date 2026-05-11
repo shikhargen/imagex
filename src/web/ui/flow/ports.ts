@@ -21,8 +21,7 @@ export const inputPorts: Record<NodeType, NodePort[]> = {
   color: [],
   file: [],
   'codex-output': [
-    { id: 'prompt-in', label: 'Prompt', kind: 'text', accepts: ['text'] },
-    { id: 'image-in', label: 'Image', kind: 'image', accepts: ['image', 'result'] },
+    { id: 'input-in', label: 'Input', kind: 'text', accepts: ['text', 'image', 'result'] },
   ],
   'color-balance': [
     { id: 'image-in', label: 'Image', kind: 'image', accepts: ['image', 'result'] },
