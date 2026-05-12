@@ -12,6 +12,57 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 // Shared registry to ensure only one select is open at a time
 const openSelects = new Set<() => void>();
 
+// ─── Debounced slider value hook ─────────────────────────────────────────────
+
+const SLIDER_DEBOUNCE_MS = 32; // ~2 frames at 60fps
+
+/**
+ * Hook that debounces slider onChange calls while keeping the displayed value instant.
+ * The slider visually updates immediately, but the expensive processing callback
+ * only fires after the user pauses dragging for SLIDER_DEBOUNCE_MS.
+ */
+function useDebouncedSlider(
+  value: number,
+  onChange: (value: unknown) => void,
+  onCommit?: ((value: unknown) => void) | undefined
+): {
+  displayValue: number;
+  handleChange: (nextValue: number[]) => void;
+  handleCommit: ((nextValue: number[]) => void) | undefined;
+} {
+  const [displayValue, setDisplayValue] = useState(value);
+  const timerRef = useRef<number>(0);
+  const latestRef = useRef(value);
+
+  // Sync display value when external value changes (e.g., undo/redo)
+  useEffect(() => {
+    setDisplayValue(value);
+    latestRef.current = value;
+  }, [value]);
+
+  const handleChange = useCallback((nextValue: number[]) => {
+    const v = nextValue[0] ?? value;
+    setDisplayValue(v);
+    latestRef.current = v;
+
+    // Debounce the expensive onChange
+    if (timerRef.current) cancelAnimationFrame(timerRef.current);
+    timerRef.current = requestAnimationFrame(() => {
+      onChange(latestRef.current);
+    });
+  }, [onChange, value]);
+
+  const handleCommit = onCommit ? (nextValue: number[]) => {
+    const v = nextValue[0] ?? value;
+    if (timerRef.current) cancelAnimationFrame(timerRef.current);
+    timerRef.current = 0;
+    setDisplayValue(v);
+    onCommit(v);
+  } : undefined;
+
+  return { displayValue, handleChange, handleCommit };
+}
+
 function useExclusiveSelect() {
   const [open, setOpen] = useState(false);
   const closeRef = useRef(() => setOpen(false));
@@ -150,23 +201,15 @@ export function FieldControl({
     const max = field.max ?? 1;
     const step = field.step ?? 0.05;
     return (
-      <Field className="ix-field">
-        <span className="ix-control-shell ix-slider-shell">
-          <FieldLabel className="ix-control-label ix-control-label--inline">{field.label}</FieldLabel>
-          <div className="ix-slider-row">
-            <Slider
-              className="nodrag ix-slider"
-              min={min}
-              max={max}
-              step={step}
-              value={[Number(value) || min]}
-              onValueChange={(nextValue) => onChange(nextValue[0] ?? min)}
-              {...(onCommit ? { onValueCommit: (nextValue: number[]) => onCommit(nextValue[0] ?? min) } : {})}
-            />
-            <span className="ix-slider-value">{stringValue || String(min)}</span>
-          </div>
-        </span>
-      </Field>
+      <DebouncedSliderField
+        label={field.label}
+        min={min}
+        max={max}
+        step={step}
+        value={Number(value) || min}
+        onChange={onChange}
+        onCommit={onCommit}
+      />
     );
   }
 
@@ -337,4 +380,46 @@ function SelectField({
 function coerceNumber(value: string): number | string {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : value;
+}
+
+// ─── Debounced Slider Field ──────────────────────────────────────────────────
+
+function DebouncedSliderField({
+  label,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+  onCommit,
+}: {
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (value: unknown) => void;
+  onCommit?: ((value: unknown) => void) | undefined;
+}) {
+  const { displayValue, handleChange, handleCommit } = useDebouncedSlider(value, onChange, onCommit);
+
+  return (
+    <Field className="ix-field">
+      <span className="ix-control-shell ix-slider-shell">
+        <FieldLabel className="ix-control-label ix-control-label--inline">{label}</FieldLabel>
+        <div className="ix-slider-row">
+          <Slider
+            className="nodrag ix-slider"
+            min={min}
+            max={max}
+            step={step}
+            value={[displayValue]}
+            onValueChange={handleChange}
+            {...(handleCommit ? { onValueCommit: handleCommit } : {})}
+          />
+          <span className="ix-slider-value">{String(displayValue)}</span>
+        </div>
+      </span>
+    </Field>
+  );
 }
