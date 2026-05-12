@@ -82,6 +82,12 @@ export function onResolutionChange(listener: () => void): () => void {
   return () => resolutionListeners.delete(listener);
 }
 
+/** Invalidate all cached processing data (call when source images change) */
+export function invalidateProcessingCache(): void {
+  sourceCache.clear();
+  chainCache.clear();
+}
+
 // ─── Source image cache ──────────────────────────────────────────────────────
 
 type CachedSource = {

@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { graphEngine } from '../../../state/graphEngine.js';
 import { flowStore } from '../../../state/flowStore.js';
 import { loadImage, renderToCanvas } from './pipeline.js';
-import { initWasm, isWasmReady, processWithWasm, onResolutionChange } from './wasmEngine.js';
+import { initWasm, isWasmReady, processWithWasm, onResolutionChange, invalidateProcessingCache } from './wasmEngine.js';
 
 // Kick off WASM initialization eagerly (non-blocking)
 initWasm();
@@ -29,18 +29,18 @@ export function useCanvasRenderer(
   const rafRef = useRef<number>(0);
   const pendingRef = useRef(false);
 
-  // Subscribe to graph topology changes (edges), output changes, AND resolution changes
+  // Subscribe to graph topology changes (edges), output changes, node data changes, AND resolution changes
   const [graphVersion, setGraphVersion] = useState(0);
   useEffect(() => {
     const unsub1 = graphEngine.subscribe(() => setGraphVersion((v) => v + 1));
     const unsub2 = flowStore.subscribeEdges(() => setGraphVersion((v) => v + 1));
-    const unsub3 = onResolutionChange(() => {
-      // Clear cache keys to force re-process at new resolution
+    const unsub3 = flowStore.subscribeNodes(() => setGraphVersion((v) => v + 1));
+    const unsub4 = onResolutionChange(() => {
       lastSourceRef.current = undefined;
       lastChainKeyRef.current = '';
       setGraphVersion((v) => v + 1);
     });
-    return () => { unsub1(); unsub2(); unsub3(); };
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
   }, []);
 
   const render = useCallback(() => {
@@ -68,6 +68,12 @@ export function useCanvasRenderer(
     if (sourceUrl === lastSourceRef.current && chainKey === lastChainKeyRef.current && hasImage) {
       return;
     }
+
+    // If source URL changed, invalidate WASM caches (old pixel data is stale)
+    if (sourceUrl !== lastSourceRef.current) {
+      invalidateProcessingCache();
+    }
+
     lastSourceRef.current = sourceUrl;
     lastChainKeyRef.current = chainKey;
 
