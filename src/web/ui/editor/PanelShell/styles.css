@@ -141,7 +141,6 @@
   align-items: center;
   justify-content: center;
   gap: var(--ui-space-2);
-  width: 100%;
   min-height: 2rem;
   border: 1px dashed var(--ui-border-subtle);
   border-radius: var(--ui-radius-md);

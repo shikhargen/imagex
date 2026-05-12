@@ -1,3 +1,7 @@
+.asset-import-btn {
+  margin: var(--ui-space-2) var(--ui-space-5);
+}
+
 .asset-grid-compact {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

@@ -101,7 +101,7 @@ function PrimitiveNode({
   }
 
   return (
-    <BaseNode data={data} selected={selected} renamable>
+    <BaseNode data={data} selected={selected} showIcon renamable>
       {/* Shared fields component */}
       <NodeFields
         node={node}

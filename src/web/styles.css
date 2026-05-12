@@ -145,6 +145,32 @@ button {
   background: rgba(255, 255, 255, 0.12);
 }
 
+/* ─── Button overrides for dark UI consistency ────────────────────────────── */
+
+[data-slot='button'][data-variant='default'] {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ui-text-primary);
+  border: 1px solid var(--ui-border-default);
+  font-weight: 500;
+}
+
+[data-slot='button'][data-variant='default']:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--ui-border-strong);
+}
+
+[data-slot='button'][data-variant='secondary'] {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ui-text-secondary);
+  border: 1px solid var(--ui-border-subtle);
+}
+
+[data-slot='button'][data-variant='secondary']:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ui-text-primary);
+  border-color: var(--ui-border-default);
+}
+
 .app-shell {
   display: grid;
   grid-template-rows: auto 1fr;

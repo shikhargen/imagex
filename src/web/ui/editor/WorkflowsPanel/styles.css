@@ -1,7 +1,7 @@
 .workflow-panel-list {
   display: grid;
   align-content: start;
-  gap: 1px;
+  gap: var(--ui-space-2);
   padding: 0 var(--ui-space-3);
 }
 
@@ -14,6 +14,7 @@
   border: 0;
   border-radius: var(--ui-radius-sm);
   padding: var(--ui-space-1) var(--ui-space-3);
+  margin: 0 var(--ui-space-2);
   color: var(--ui-text-muted);
   background: transparent;
   text-align: left;

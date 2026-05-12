@@ -50,18 +50,6 @@
   font-weight: 600;
 }
 
-.top-bar-tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 25%;
-  right: 25%;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--ui-text-primary);
-  opacity: 0.5;
-}
-
 .top-bar-tab-add {
   padding: var(--ui-space-2);
   color: var(--ui-text-dim);

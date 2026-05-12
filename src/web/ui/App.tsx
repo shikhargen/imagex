@@ -861,16 +861,12 @@ function AssetsModal({
             }}
           />
         </header>
-        <div className="assets-body">
-          <aside>
-            <Button variant="secondary" className="w-full justify-start">Images</Button>
-            <Button variant="ghost" className="w-full justify-start" disabled>Other Assets</Button>
-          </aside>
-          <div className="asset-grid">
+        <div className="assets-modal-body">
+          <div className="asset-grid-compact">
             {assets.map((asset) => (
               <article
                 key={asset.id}
-                className="asset-card"
+                className="asset-card-compact"
                 onContextMenu={(event) => {
                   event.preventDefault();
                   onMenu(asset.id, { x: event.clientX, y: event.clientY });
@@ -880,7 +876,7 @@ function AssetsModal({
                   <span className="asset-thumbnail">
                     <img src={asset.url} alt={asset.name} loading="lazy" />
                   </span>
-                  <span>{asset.name}</span>
+                  <span className="asset-name">{asset.name}</span>
                 </button>
               </article>
             ))}
