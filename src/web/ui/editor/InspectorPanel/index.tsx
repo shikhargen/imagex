@@ -57,7 +57,7 @@ export function InspectorPanel({
       {node ? (
         contentNodeTypes.has(node.type) ? (
           // Non-primitive nodes: render the full node body (preview + controls)
-          <div className="inspector-content">
+          <div className="inspector-content" style={{ '--node-accent': nodeMeta[node.type].accent } as React.CSSProperties}>
             <NodeContent
               node={node}
               onChange={onChange}
