@@ -175,16 +175,43 @@ function CropContent({ node, onChange }: { node: ImageXNode; onChange: (nodeId: 
     }
   }, [hasCrop, imgDims.w, imgDims.h]);
 
+  const cropRafRef = useRef(0);
+  const pendingCropRef = useRef<{ x: number; y: number; w: number; h: number; ongoing: boolean } | null>(null);
+
   const handleCropChange = useCallback((nx: number, ny: number, nw: number, nh: number, ongoing: boolean) => {
-    onChange(node.id, 'x', Math.round(nx));
-    onChange(node.id, 'y', Math.round(ny));
-    onChange(node.id, 'cropWidth', Math.round(nw));
-    onChange(node.id, 'cropHeight', Math.round(nh));
+    const x = Math.round(nx);
+    const y = Math.round(ny);
+    const w = Math.round(nw);
+    const h = Math.round(nh);
+
     if (!ongoing) {
+      // Commit: apply immediately, cancel any pending frame
+      if (cropRafRef.current) { cancelAnimationFrame(cropRafRef.current); cropRafRef.current = 0; }
+      pendingCropRef.current = null;
+      onChange(node.id, 'x', x);
+      onChange(node.id, 'y', y);
+      onChange(node.id, 'cropWidth', w);
+      onChange(node.id, 'cropHeight', h);
       graphEngine.updateNode(
-        { ...node, data: { ...node.data, x: Math.round(nx), y: Math.round(ny), cropWidth: Math.round(nw), cropHeight: Math.round(nh) } },
+        { ...node, data: { ...node.data, x, y, cropWidth: w, cropHeight: h } },
         false,
       );
+      return;
+    }
+
+    // Ongoing: throttle to one update per animation frame
+    pendingCropRef.current = { x, y, w, h, ongoing: true };
+    if (!cropRafRef.current) {
+      cropRafRef.current = requestAnimationFrame(() => {
+        cropRafRef.current = 0;
+        const pending = pendingCropRef.current;
+        if (!pending) return;
+        pendingCropRef.current = null;
+        onChange(node.id, 'x', pending.x);
+        onChange(node.id, 'y', pending.y);
+        onChange(node.id, 'cropWidth', pending.w);
+        onChange(node.id, 'cropHeight', pending.h);
+      });
     }
   }, [node, onChange]);
 
