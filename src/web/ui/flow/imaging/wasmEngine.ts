@@ -3,10 +3,8 @@
  *
  * Flow: image → scratch canvas → WASM memory (PhotonImage) → process → target canvas
  *
- * Optimizations:
- * - Caches the downscaled source PhotonImage per URL (avoids re-rasterizing every frame)
- * - Caches intermediate chain results (only re-processes from the point of change)
- * - During slider drags, typically only the last step re-runs (~1-5ms instead of full chain)
+ * Optimization:
+ * - Caches the downscaled source pixel data per URL (avoids re-rasterizing every frame)
  */
 
 import initPhoton, {
@@ -71,9 +69,7 @@ const resolutionListeners = new Set<() => void>();
 export function setPreviewResolution(value: number): void {
   PREVIEW_MAX_WIDTH = value;
   localStorage.setItem('imagex.previewResolution', String(value));
-  // Invalidate all caches when resolution changes
   sourceCache.clear();
-  chainCache.clear();
   for (const fn of resolutionListeners) fn();
 }
 
@@ -85,18 +81,14 @@ export function onResolutionChange(listener: () => void): () => void {
 /** Invalidate all cached processing data (call when source images change) */
 export function invalidateProcessingCache(): void {
   sourceCache.clear();
-  chainCache.clear();
 }
 
 // ─── Source image cache ──────────────────────────────────────────────────────
 
 type CachedSource = {
-  url: string;
   width: number;
   height: number;
   scaleFactor: number;
-  /** Raw pixel data (Uint8Array) — we store this instead of PhotonImage since
-   *  PhotonImage can be consumed/freed. We re-create PhotonImage from this. */
   pixels: Uint8Array;
 };
 
@@ -125,11 +117,11 @@ function getOrCreateSource(sourceImg: HTMLImageElement): CachedSource {
   const scratchCtx = scratch.getContext('2d')!;
   scratchCtx.drawImage(sourceImg, 0, 0, drawW, drawH);
 
-  // Extract pixels (we'll use these to create PhotonImages on demand)
+  // Extract pixels
   const imageData = scratchCtx.getImageData(0, 0, drawW, drawH);
   const pixels = new Uint8Array(imageData.data.buffer.slice(0));
 
-  const entry: CachedSource = { url: sourceImg.src, width: drawW, height: drawH, scaleFactor, pixels };
+  const entry: CachedSource = { width: drawW, height: drawH, scaleFactor, pixels };
 
   // Evict oldest if at capacity
   if (sourceCache.size >= SOURCE_CACHE_MAX) {
@@ -151,88 +143,11 @@ function photonFromSource(source: CachedSource): PhotonImage {
   return open_image(scratch, ctx);
 }
 
-// ─── Chain intermediate cache ────────────────────────────────────────────────
-
-type ChainCacheEntry = {
-  /** Key: JSON of chain steps up to this point */
-  chainKey: string;
-  /** Pixel data after processing these steps */
-  pixels: Uint8Array;
-  width: number;
-  height: number;
-};
-
-const chainCache = new Map<string, ChainCacheEntry>();
-const CHAIN_CACHE_MAX = 6;
-
-function chainCacheKey(sourceUrl: string, steps: Array<{ type: string; params: Record<string, unknown> }>, scaleFactor: number): string {
-  return `${sourceUrl}@${PREVIEW_MAX_WIDTH}|${JSON.stringify(steps)}`;
-}
-
-function getCachedIntermediate(sourceUrl: string, chain: Array<{ type: string; params: Record<string, unknown> }>, scaleFactor: number): { img: PhotonImage; startIndex: number; scaleFactor: number } | null {
-  // Try to find the longest cached prefix of the chain
-  for (let i = chain.length - 1; i >= 0; i--) {
-    const prefix = chain.slice(0, i);
-    const key = chainCacheKey(sourceUrl, prefix, scaleFactor);
-    const cached = chainCache.get(key);
-    if (cached) {
-      // Recreate PhotonImage from cached pixels
-      const scratch = getScratchCanvas();
-      scratch.width = cached.width;
-      scratch.height = cached.height;
-      const ctx = scratch.getContext('2d')!;
-      const imageData = new ImageData(new Uint8ClampedArray(cached.pixels), cached.width, cached.height);
-      ctx.putImageData(imageData, 0, 0);
-      const img = open_image(scratch, ctx);
-      return { img, startIndex: i, scaleFactor };
-    }
-  }
-  return null;
-}
-
-function cacheIntermediate(sourceUrl: string, chain: Array<{ type: string; params: Record<string, unknown> }>, scaleFactor: number, img: PhotonImage): void {
-  const key = chainCacheKey(sourceUrl, chain, scaleFactor);
-  if (chainCache.has(key)) return;
-
-  // Extract pixels from the current PhotonImage state
-  const w = img.get_width();
-  const h = img.get_height();
-  const scratch = getScratchCanvas();
-  scratch.width = w;
-  scratch.height = h;
-  const ctx = scratch.getContext('2d')!;
-  // We need to render to canvas to get pixels — but putImageData consumes the image.
-  // Instead, use get_raw_pixels() if available, or skip caching for consumed images.
-  // photon-rs exposes get_raw_pixels() which returns a Uint8Array (RGBA).
-  const rawPixels = img.get_raw_pixels();
-  const pixels = new Uint8Array(rawPixels.buffer.slice(0));
-
-  // Evict oldest if at capacity
-  if (chainCache.size >= CHAIN_CACHE_MAX) {
-    const firstKey = chainCache.keys().next().value;
-    if (firstKey !== undefined) chainCache.delete(firstKey);
-  }
-  chainCache.set(key, { chainKey: key, pixels, width: w, height: h });
-}
-
-/** Recreate a PhotonImage from raw RGBA pixels */
-function photonFromPixels(pixels: Uint8Array, width: number, height: number): PhotonImage {
-  const scratch = getScratchCanvas();
-  scratch.width = width;
-  scratch.height = height;
-  const ctx = scratch.getContext('2d')!;
-  const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
-  ctx.putImageData(imageData, 0, 0);
-  return open_image(scratch, ctx);
-}
-
 // ─── Main processing function ────────────────────────────────────────────────
 
 /**
  * Process an image through a chain of operations using photon WASM.
  * Renders the result directly to the target canvas.
- *
- * Uses caching to avoid re-processing the entire chain when only the last step changes.
  */
 export function processWithWasm(
   targetCanvas: HTMLCanvasElement,
@@ -243,35 +158,13 @@ export function processWithWasm(
     throw new Error('[wasmEngine] WASM not initialized. Call initWasm() first.');
   }
 
-  // Get or create cached source
+  // Get or create cached source (avoids re-rasterizing every frame)
   const source = getOrCreateSource(sourceImg);
-  const { scaleFactor } = source;
+  let img = photonFromSource(source);
 
-  let img: PhotonImage;
-  let startIndex = 0;
-
-  // Try to resume from a cached intermediate
-  const cached = getCachedIntermediate(source.url, chain, scaleFactor);
-  if (cached) {
-    img = cached.img;
-    startIndex = cached.startIndex;
-  } else {
-    // Start from source
-    img = photonFromSource(source);
-  }
-
-  // Apply remaining steps
-  for (let i = startIndex; i < chain.length; i++) {
-    // Cache the state BEFORE applying the last step (most useful for slider drags)
-    if (i === chain.length - 1 && chain.length > 1) {
-      cacheIntermediate(source.url, chain.slice(0, i), scaleFactor, img);
-    }
-    img = applyWasmStep(img, chain[i]!, scaleFactor);
-  }
-
-  // Cache the full chain result too (for downstream nodes that read the same chain)
-  if (chain.length > 0) {
-    cacheIntermediate(source.url, chain, scaleFactor, img);
+  // Apply each operation
+  for (const step of chain) {
+    img = applyWasmStep(img, step, source.scaleFactor);
   }
 
   // Write result to target canvas
