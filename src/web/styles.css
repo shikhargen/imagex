@@ -2,70 +2,81 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/geist';
+@import '@fontsource-variable/jetbrains-mono';
 @import './ui/components/dropdown.css';
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system,
-    BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #e5e7eb;
-  background: #050912;
-  font-size: calc(18px * var(--font-scale, 1));
+  font-family: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  color: #e8e8ed;
+  background: #0a0a0c;
+  font-size: calc(16px * var(--font-scale, 1));
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 
-  /* Custom UI System Variables */
-  --ui-bg-base: #0f0f0f;
-  --ui-bg-panel: #171717;
-  --ui-bg-surface: #1e1e1e;
-  --ui-bg-overlay: #282828;
-  --ui-bg-hover: rgba(255, 255, 255, 0.07);
-  --ui-bg-active: rgba(255, 255, 255, 0.12);
-  --ui-bg-accent: rgba(99, 102, 241, 0.2);
-  
-  --ui-border-subtle: rgba(148, 163, 184, 0.1);
-  --ui-border-default: rgba(148, 163, 184, 0.18);
-  --ui-border-strong: rgba(148, 163, 184, 0.28);
-  --ui-border-accent: rgba(250, 204, 21, 0.6);
-  
-  --ui-text-primary: #f8fafc;
-  --ui-text-secondary: #d4d4d8;
-  --ui-text-muted: #a8a8b0;
-  --ui-text-dim: #7e7e8a;
-  --ui-text-inverse: #f4f4f5;
-  --ui-text-subtle: #cbd5e1;
-  --ui-text-faint: #a8b3c4;
-  
-  --ui-color-danger: #ff8c8c;
-  --ui-color-danger-bg: #991b1b;
-  --ui-color-danger-border: #7f1d1d;
-  
-  --ui-text-xs: 0.667rem;
-  --ui-text-sm: 0.722rem;
-  --ui-text-base: 0.833rem;
+  /* ─── Surface scale (near-black base, layered up) ──────────────────────── */
+  --ui-bg-base: #0a0a0c;
+  --ui-bg-panel: #131316;
+  --ui-bg-surface: #1a1a1f;
+  --ui-bg-elevated: #222228;
+  --ui-bg-hover: rgba(255, 255, 255, 0.05);
+  --ui-bg-active: rgba(255, 255, 255, 0.09);
+
+  /* ─── Borders (translucent white, minimal) ─────────────────────────────── */
+  --ui-border-subtle: rgba(255, 255, 255, 0.04);
+  --ui-border-default: rgba(255, 255, 255, 0.08);
+  --ui-border-strong: rgba(255, 255, 255, 0.16);
+
+  /* ─── Text scale ────────────────────────────────────────────────────────── */
+  --ui-text-primary: #f4f4f6;
+  --ui-text-secondary: rgba(255, 255, 255, 0.82);
+  --ui-text-muted: rgba(255, 255, 255, 0.56);
+  --ui-text-dim: rgba(255, 255, 255, 0.36);
+
+  /* ─── Accent (warm amber — distinctive, high contrast on dark) ──────────── */
+  --ui-accent: #f59e0b;
+  --ui-accent-soft: rgba(245, 158, 11, 0.15);
+  --ui-accent-text: #fbbf24;
+
+  /* ─── Danger ────────────────────────────────────────────────────────────── */
+  --ui-color-danger: #f87171;
+  --ui-color-danger-bg: rgba(248, 113, 113, 0.12);
+
+  /* ─── Typography ────────────────────────────────────────────────────────── */
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  --ui-text-xs: 0.625rem;
+  --ui-text-sm: 0.75rem;
+  --ui-text-base: 0.875rem;
   --ui-text-lg: 1rem;
-  --ui-text-xl: 1.222rem;
-  
-  --ui-space-1: 0.222rem;
-  --ui-space-2: 0.333rem;
-  --ui-space-3: 0.444rem;
-  --ui-space-4: 0.556rem;
-  --ui-space-5: 0.667rem;
-  --ui-space-6: 0.778rem;
-  --ui-space-7: 0.889rem;
-  --ui-space-8: 1.111rem;
-  
-  --ui-radius-sm: 4px;
-  --ui-radius-md: 6px;
-  --ui-radius-lg: 8px;
-  --ui-radius-xl: 12px;
-  
-  --ui-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
-  --ui-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --ui-shadow-lg: 0 0.556rem 1.556rem rgba(0, 0, 0, 0.5);
+  --ui-text-xl: 1.25rem;
 
-  /* Shadcn light defaults */
+  /* ─── Spacing (8px grid) ────────────────────────────────────────────────── */
+  --ui-space-1: 0.25rem;
+  --ui-space-2: 0.375rem;
+  --ui-space-3: 0.5rem;
+  --ui-space-4: 0.625rem;
+  --ui-space-5: 0.75rem;
+  --ui-space-6: 1rem;
+  --ui-space-7: 1.25rem;
+  --ui-space-8: 1.5rem;
+
+  /* ─── Radii ─────────────────────────────────────────────────────────────── */
+  --ui-radius-sm: 4px;
+  --ui-radius-md: 8px;
+  --ui-radius-lg: 12px;
+  --ui-radius-xl: 16px;
+  --ui-radius-2xl: 20px;
+
+  /* ─── Shadows (minimal — flat aesthetic) ─────────────────────────────────── */
+  --ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --ui-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --ui-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+
+  /* Shadcn overrides */
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -148,27 +159,35 @@ button {
 /* ─── Button overrides for dark UI consistency ────────────────────────────── */
 
 [data-slot='button'][data-variant='default'] {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--ui-text-primary);
-  border: 1px solid var(--ui-border-default);
-  font-weight: 500;
+  background: var(--ui-accent);
+  color: #0a0a0c;
+  border: none;
+  font-weight: 600;
 }
 
 [data-slot='button'][data-variant='default']:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: var(--ui-border-strong);
+  background: var(--ui-accent-text);
 }
 
 [data-slot='button'][data-variant='secondary'] {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--ui-bg-elevated);
   color: var(--ui-text-secondary);
-  border: 1px solid var(--ui-border-subtle);
+  border: 1px solid var(--ui-border-default);
 }
 
 [data-slot='button'][data-variant='secondary']:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.09);
   color: var(--ui-text-primary);
-  border-color: var(--ui-border-default);
+  border-color: var(--ui-border-strong);
+}
+
+[data-slot='button'][data-variant='ghost'] {
+  color: var(--ui-text-muted);
+}
+
+[data-slot='button'][data-variant='ghost']:hover:not(:disabled) {
+  background: var(--ui-bg-hover);
+  color: var(--ui-text-primary);
 }
 
 .app-shell {

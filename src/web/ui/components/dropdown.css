@@ -1,29 +1,22 @@
 /**
  * Shared dropdown/menu styles.
  * Used by: select dropdowns, context menus, sidebar menus, submenus.
- * Single source of truth for all floating panel/menu UI.
  */
-
-/* ─── Dropdown panel (the floating container) ─────────────────────────────── */
 
 .ix-dropdown {
   border: 1px solid var(--ui-border-default);
   border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-panel);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03);
-  animation: ix-dropdown-enter 0.14s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--ui-bg-surface);
+  box-shadow: var(--ui-shadow-lg);
+  animation: ix-dropdown-enter 0.1s ease;
   overflow: hidden;
 }
-
-/* ─── Dropdown list (vertical flex container for items) ───────────────────── */
 
 .ix-dropdown-list {
   display: flex;
   flex-direction: column;
   padding: 0.25rem;
 }
-
-/* ─── Dropdown item ───────────────────────────────────────────────────────── */
 
 .ix-dropdown-item {
   display: flex;
@@ -35,10 +28,10 @@
   border-radius: var(--ui-radius-sm);
   background: transparent;
   color: var(--ui-text-secondary);
-  font-size: 0.75rem;
+  font-size: var(--ui-text-sm);
   text-align: left;
   cursor: pointer;
-  transition: background 0.1s ease, color 0.1s ease;
+  transition: background 0.08s ease, color 0.08s ease;
 }
 
 .ix-dropdown-item:hover,
@@ -50,8 +43,7 @@
 
 .ix-dropdown-item[data-state='checked'],
 .ix-dropdown-item.selected {
-  color: var(--node-accent, var(--ui-text-primary));
-  font-weight: 500;
+  color: var(--ui-accent-text);
 }
 
 .ix-dropdown-item.danger {
@@ -62,15 +54,11 @@
   background: var(--ui-color-danger-bg);
 }
 
-/* ─── Separator ───────────────────────────────────────────────────────────── */
-
 .ix-dropdown-separator {
   height: 1px;
   background: var(--ui-border-subtle);
   margin: 0.25rem 0;
 }
-
-/* ─── Animation ───────────────────────────────────────────────────────────── */
 
 @keyframes ix-dropdown-enter {
   from {

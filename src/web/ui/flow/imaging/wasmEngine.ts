@@ -11,7 +11,6 @@ import initPhoton, {
   open_image,
   putImageData,
   gaussian_blur,
-  rotate,
   fliph,
   flipv,
   crop,
@@ -190,13 +189,41 @@ export function applyWasmStep(
       const doFlipH = Boolean(step.params.flipH);
       const doFlipV = Boolean(step.params.flipV);
 
-      if (angle !== 0) {
-        const rotated = rotate(img, angle);
-        img.free();
-        img = rotated;
+      // photon's rotate() has a shear bug for exact 90° multiples — do it manually
+      if (angle === 90 || angle === 270 || angle === 180) {
+        const srcW = img.get_width();
+        const srcH = img.get_height();
+        const dstW = (angle === 90 || angle === 270) ? srcH : srcW;
+        const dstH = (angle === 90 || angle === 270) ? srcW : srcH;
+
+        // Render current photon image to a scratch canvas
+        const scratch = document.createElement('canvas');
+        scratch.width = srcW;
+        scratch.height = srcH;
+        const sCtx = scratch.getContext('2d')!;
+        putImageData(scratch, sCtx, img);
+        // img is now consumed by putImageData — do NOT free
+
+        // Draw rotated (and optionally flipped) onto the output canvas
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = dstW;
+        outCanvas.height = dstH;
+        const oCtx = outCanvas.getContext('2d')!;
+        oCtx.save();
+        oCtx.translate(dstW / 2, dstH / 2);
+        if (doFlipH) oCtx.scale(-1, 1);
+        if (doFlipV) oCtx.scale(1, -1);
+        oCtx.rotate((angle * Math.PI) / 180);
+        oCtx.drawImage(scratch, -srcW / 2, -srcH / 2);
+        oCtx.restore();
+
+        // Convert back to PhotonImage
+        img = open_image(outCanvas, oCtx);
+      } else {
+        // angle === 0 — only flips
+        if (doFlipH) fliph(img);
+        if (doFlipV) flipv(img);
       }
-      if (doFlipH) fliph(img);
-      if (doFlipV) flipv(img);
       return img;
     }
 

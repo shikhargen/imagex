@@ -322,7 +322,7 @@ export function FlowEditor({
         defaultEdgeOptions={memoizedEdgeOptions}
         elevateNodesOnSelect={false}
       >
-        <Background variant={BackgroundVariant.Dots} color="#5b6472" gap={24} size={1.35} />
+        <Background variant={BackgroundVariant.Dots} color="rgba(255,255,255,0.08)" gap={24} size={1} />
         {showMinimap !== false && (
           <MiniMap
             pannable

@@ -8,8 +8,8 @@
   flex-direction: column;
   justify-content: space-between;
   align-items: center;
-  border-right: 1px solid var(--ui-border-default);
-  background: var(--ui-bg-surface);
+  border-right: 1px solid var(--ui-border-subtle);
+  background: var(--ui-bg-panel);
   overflow: visible;
 }
 
@@ -26,14 +26,14 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 2.667rem;
+  min-height: 2.5rem;
   border: none;
   border-radius: 0;
   padding: var(--ui-space-2) 0;
   background: transparent;
   color: var(--ui-text-dim);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.1s ease;
   position: relative;
 }
 
@@ -54,8 +54,7 @@
   bottom: 20%;
   width: 2px;
   border-radius: 0 1px 1px 0;
-  background: var(--ui-text-primary);
-  opacity: 0.8;
+  background: var(--ui-accent);
 }
 
 /* Sidebar menu */
@@ -81,9 +80,9 @@
 .menu-shell {
   border: 1px solid var(--ui-border-default);
   border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-panel);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03);
-  animation: ix-dropdown-enter 0.14s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--ui-bg-surface);
+  box-shadow: var(--ui-shadow-lg);
+  animation: ix-dropdown-enter 0.1s ease;
 }
 
 .menu-list {
@@ -112,10 +111,10 @@
   border-radius: var(--ui-radius-sm);
   background: transparent;
   color: var(--ui-text-secondary);
-  font-size: 0.75rem;
+  font-size: var(--ui-text-sm);
   text-align: left;
   cursor: pointer;
-  transition: background 0.1s ease, color 0.1s ease;
+  transition: background 0.08s ease, color 0.08s ease;
 }
 
 .menu-item:hover,
@@ -134,8 +133,8 @@
   padding: 0.25rem;
   border: 1px solid var(--ui-border-default);
   border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-panel);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03);
+  background: var(--ui-bg-surface);
+  box-shadow: var(--ui-shadow-lg);
   z-index: 50;
-  animation: ix-dropdown-enter 0.14s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: ix-dropdown-enter 0.1s ease;
 }

@@ -52,6 +52,7 @@ export function useCanvasRenderer(
       if (hasImage) setHasImage(false);
       canvas.width = 0;
       canvas.height = 0;
+      canvas.style.aspectRatio = '';
       lastSourceRef.current = undefined;
       lastChainKeyRef.current = '';
       return;
@@ -85,6 +86,12 @@ export function useCanvasRenderer(
           processWithWasm(canvasRef.current, img, fullChain);
         } else {
           renderToCanvas(canvasRef.current, img, fullChain);
+        }
+        // Explicitly set CSS aspect-ratio so the container always matches
+        // the canvas intrinsic dimensions, even after rotation swaps w/h.
+        const c = canvasRef.current;
+        if (c.width > 0 && c.height > 0) {
+          c.style.aspectRatio = `${c.width} / ${c.height}`;
         }
         setHasImage(true);
       } catch (e) {

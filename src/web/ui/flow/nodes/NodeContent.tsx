@@ -139,15 +139,39 @@ function RotateFlipContent({ node, onChange }: { node: ImageXNode; onChange: (no
 
 /* ─── Crop Content ────────────────────────────────────────────────────────── */
 
+/** Compute the image dimensions after applying an upstream chain (before crop). */
+function computeChainOutputDims(sourceW: number, sourceH: number, chain: Array<{ type: string; params: Record<string, unknown> }>): { w: number; h: number } {
+  let w = sourceW;
+  let h = sourceH;
+  for (const step of chain) {
+    if (step.type === 'rotate-flip') {
+      const angle = ((Number(step.params.rotate) || 0) % 360 + 360) % 360;
+      if (angle === 90 || angle === 270) {
+        [w, h] = [h, w];
+      }
+    } else if (step.type === 'crop') {
+      const cw = Number(step.params.cropWidth) || w;
+      const ch = Number(step.params.cropHeight) || h;
+      w = cw;
+      h = ch;
+    }
+    // color-balance, blur: no dimension change
+  }
+  return { w, h };
+}
+
 function CropContent({ node, onChange }: { node: ImageXNode; onChange: (nodeId: string, key: string, value: unknown) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { hasImage } = useCanvasRenderer(canvasRef, node.id, '__source_only', node.data as Record<string, unknown>);
 
   const [imgDims, setImgDims] = useState({ w: 0, h: 0 });
   useEffect(() => {
-    const { sourceUrl } = graphEngine.traceUpstream(node.id);
+    const { sourceUrl, chain } = graphEngine.traceUpstream(node.id);
     if (!sourceUrl) return;
-    loadImage(sourceUrl).then((img) => setImgDims({ w: img.naturalWidth, h: img.naturalHeight }));
+    loadImage(sourceUrl).then((img) => {
+      const { w, h } = computeChainOutputDims(img.naturalWidth, img.naturalHeight, chain);
+      setImgDims({ w, h });
+    });
   }, [node.id]);
 
   const [graphVer, setGraphVer] = useState(0);
@@ -155,9 +179,12 @@ function CropContent({ node, onChange }: { node: ImageXNode; onChange: (nodeId: 
     return graphEngine.subscribe(() => setGraphVer((v) => v + 1));
   }, []);
   useEffect(() => {
-    const { sourceUrl } = graphEngine.traceUpstream(node.id);
+    const { sourceUrl, chain } = graphEngine.traceUpstream(node.id);
     if (!sourceUrl) { setImgDims({ w: 0, h: 0 }); return; }
-    loadImage(sourceUrl).then((img) => setImgDims({ w: img.naturalWidth, h: img.naturalHeight }));
+    loadImage(sourceUrl).then((img) => {
+      const { w, h } = computeChainOutputDims(img.naturalWidth, img.naturalHeight, chain);
+      setImgDims({ w, h });
+    });
   }, [graphVer, node.id]);
 
   const hasCrop = Number(node.data.cropWidth) > 0 && Number(node.data.cropHeight) > 0;
@@ -166,14 +193,23 @@ function CropContent({ node, onChange }: { node: ImageXNode; onChange: (nodeId: 
   const cropX = hasCrop ? (Number(node.data.x) || 0) : Math.round(imgDims.w * 0.1);
   const cropY = hasCrop ? (Number(node.data.y) || 0) : Math.round(imgDims.h * 0.1);
 
+  // Initialize crop to 80% centered when no crop is set, OR when existing crop
+  // is completely out of bounds for the current image (e.g. duplicated node
+  // connected to a different image).
   useEffect(() => {
-    if (!hasCrop && imgDims.w > 0 && imgDims.h > 0) {
+    if (imgDims.w <= 0 || imgDims.h <= 0) return;
+    const cw = Number(node.data.cropWidth) || 0;
+    const ch = Number(node.data.cropHeight) || 0;
+    const cx = Number(node.data.x) || 0;
+    const cy = Number(node.data.y) || 0;
+    const outOfBounds = cw > 0 && ch > 0 && (cx + cw > imgDims.w * 1.05 || cy + ch > imgDims.h * 1.05 || cw > imgDims.w * 1.05 || ch > imgDims.h * 1.05);
+    if (!hasCrop || outOfBounds) {
       onChange(node.id, 'x', Math.round(imgDims.w * 0.1));
       onChange(node.id, 'y', Math.round(imgDims.h * 0.1));
       onChange(node.id, 'cropWidth', Math.round(imgDims.w * 0.8));
       onChange(node.id, 'cropHeight', Math.round(imgDims.h * 0.8));
     }
-  }, [hasCrop, imgDims.w, imgDims.h]);
+  }, [imgDims.w, imgDims.h]);
 
   const cropRafRef = useRef(0);
   const pendingCropRef = useRef<{ x: number; y: number; w: number; h: number; ongoing: boolean } | null>(null);

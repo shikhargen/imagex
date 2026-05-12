@@ -5,10 +5,10 @@
   grid-template-rows: minmax(0, 1fr);
   width: var(--side-panel, 16rem);
   height: 100%;
-  border-right: 1px solid var(--ui-border-default);
-  background: var(--ui-bg-surface);
+  border-right: 1px solid var(--ui-border-subtle);
+  background: var(--ui-bg-panel);
   box-shadow: 4px 0 16px rgba(0, 0, 0, 0.3);
-  animation: panel-slide-in 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: panel-slide-in 0.1s ease;
 }
 
 .side-panel-inner {

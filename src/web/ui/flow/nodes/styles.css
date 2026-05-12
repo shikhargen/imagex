@@ -8,14 +8,16 @@
   );
   min-width: 20rem;
   max-width: 42rem;
-  border: 2px solid var(--ui-border-default);
-  border-radius: 16px;
+  border: 2px solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-2xl);
   background: var(--ui-bg-surface);
   color: var(--ui-text-primary);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   overflow: visible;
-  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  padding-bottom: 0.25rem;
+}
+
+.ix-node.selected {
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 .ix-node-prompt {
@@ -50,8 +52,7 @@
 }
 
 .ix-node.selected {
-  outline: 2px solid var(--node-accent);
-  outline-offset: 0px;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5);
 }
 
 /* Frame nodes */
@@ -59,10 +60,9 @@
   width: 100%;
   height: 100%;
   min-height: 100%;
-  background: rgba(20, 20, 20, 0.4);
+  background: rgba(255, 255, 255, 0.02);
   border: 1px dashed var(--ui-border-default);
-  border-radius: 16px;
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.02);
+  border-radius: var(--ui-radius-2xl);
   max-width: none;
   padding-top: 2.25rem;
 }
@@ -83,13 +83,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.5rem 0.625rem;
-  border-radius: 16px 16px 0 0;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.03) 0%,
-    transparent 100%
-  );
+  padding: 0.625rem 0.75rem;
 }
 
 .ix-node-header-main {
@@ -324,10 +318,10 @@
   min-width: 0;
   min-height: 1.75rem;
   border: 1px solid var(--ui-border-subtle);
-  border-radius: var(--ui-radius-lg);
+  border-radius: var(--ui-radius-md);
   overflow: hidden;
-  background: var(--ui-bg-panel);
-  transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 0.1s ease;
 }
 
 .ix-control-shell:hover {
@@ -335,8 +329,7 @@
 }
 
 .ix-control-shell:focus-within {
-  border-color: color-mix(in srgb, var(--node-accent) 50%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent) 10%, transparent);
+  border-color: var(--ui-border-strong);
 }
 
 .ix-control-shell > * {
@@ -508,22 +501,22 @@
 
 /* Select dropdown content — uses shared .ix-dropdown styles */
 [data-slot='select-content'] {
-  background: var(--ui-bg-panel) !important;
+  background: var(--ui-bg-surface) !important;
   border: 1px solid var(--ui-border-default) !important;
   border-radius: var(--ui-radius-lg) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03) !important;
+  box-shadow: var(--ui-shadow-lg) !important;
   min-width: var(--radix-select-trigger-width) !important;
   padding: 0.25rem !important;
-  animation: ix-dropdown-enter 0.14s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  animation: ix-dropdown-enter 0.1s ease !important;
 }
 
 [data-slot='select-item'] {
   color: var(--ui-text-secondary) !important;
-  font-size: 0.75rem !important;
+  font-size: var(--ui-text-sm) !important;
   padding: 0.375rem 0.625rem !important;
   border-radius: var(--ui-radius-sm) !important;
   cursor: pointer;
-  transition: background 0.1s ease, color 0.1s ease !important;
+  transition: background 0.08s ease, color 0.08s ease !important;
 }
 
 [data-slot='select-item']:hover,
@@ -533,8 +526,7 @@
 }
 
 [data-slot='select-item'][data-state='checked'] {
-  color: var(--node-accent, var(--ui-text-primary)) !important;
-  font-weight: 500;
+  color: var(--ui-accent-text) !important;
 }
 
 /* Slider */
@@ -590,36 +582,34 @@
 }
 
 .ix-slider [data-slot='slider-range'] {
-  background: color-mix(in srgb, var(--node-accent, #a78bfa) 60%, transparent) !important;
+  background: var(--node-accent, var(--ui-accent)) !important;
   border-radius: 3px !important;
-  transition: background 0.15s !important;
+  opacity: 0.6;
+  transition: opacity 0.1s !important;
 }
 
 .ix-slider:hover [data-slot='slider-range'] {
-  background: color-mix(in srgb, var(--node-accent, #a78bfa) 80%, transparent) !important;
+  opacity: 0.8;
 }
 
 .ix-slider [data-slot='slider-thumb'] {
   width: 14px !important;
   height: 14px !important;
   background: #fff !important;
-  border: 2px solid color-mix(in srgb, var(--node-accent, #a78bfa) 70%, transparent) !important;
+  border: 2px solid var(--node-accent, var(--ui-accent)) !important;
   border-radius: 50% !important;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4) !important;
-  transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s, box-shadow 0.15s !important;
+  box-shadow: none !important;
+  transition: transform 0.1s ease, border-color 0.1s !important;
   cursor: grab !important;
 }
 
 .ix-slider [data-slot='slider-thumb']:hover {
-  transform: scale(1.25) !important;
-  border-color: var(--node-accent, #a78bfa) !important;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--node-accent, #a78bfa) 20%, transparent), 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+  transform: scale(1.2) !important;
 }
 
 .ix-slider [data-slot='slider-thumb']:active {
-  transform: scale(1.15) !important;
+  transform: scale(1.1) !important;
   cursor: grabbing !important;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--node-accent, #a78bfa) 25%, transparent), 0 2px 8px rgba(0, 0, 0, 0.5) !important;
 }
 
 .ix-slider-value {
@@ -630,11 +620,10 @@
   min-width: 2.25rem;
   padding: 0.188rem 0.375rem;
   text-align: center;
-  color: var(--ui-text-secondary);
+  color: var(--ui-text-muted);
   font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, monospace;
-  border: 1px solid var(--ui-border-subtle);
+  font-family: var(--font-mono);
   border-radius: var(--ui-radius-sm);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -1012,13 +1001,19 @@
 
 .ix-edit-preview {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0.5rem 0.625rem;
-  border-radius: var(--ui-radius-md);
-  border: 1px solid var(--ui-border-subtle);
+  margin: 0.5rem 0.625rem 0.375rem;
+  border-radius: var(--ui-radius-lg);
   overflow: hidden;
+  clip-path: inset(0 round var(--ui-radius-lg));
+}
+
+.ix-canvas-preview {
+  width: 100%;
+  height: auto;
+  display: block;
+  position: relative;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .ix-edit-preview img {
@@ -1111,18 +1106,11 @@
   cursor: not-allowed;
 }
 
-/* Canvas preview element */
-.ix-canvas-preview {
-  width: 100%;
-  height: auto;
-  display: block;
-  border-radius: var(--ui-radius-sm);
-}
-
 /* Crop container */
 .ix-crop-container {
   position: relative;
   margin: 0.5rem 0.625rem;
+  border-radius: var(--ui-radius-lg);
 }
 
 .ix-crop-area {

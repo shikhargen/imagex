@@ -538,9 +538,9 @@
   border: 1px solid var(--ui-border-default);
   border-radius: var(--ui-radius-lg);
   padding: 0.25rem;
-  background: var(--ui-bg-panel);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03);
-  animation: ix-dropdown-enter 0.14s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--ui-bg-surface);
+  box-shadow: var(--ui-shadow-lg);
+  animation: ix-dropdown-enter 0.1s ease;
 }
 
 .node-menu button {
@@ -552,9 +552,9 @@
   color: var(--ui-text-secondary);
   background: transparent;
   text-align: left;
-  font-size: 0.75rem;
+  font-size: var(--ui-text-sm);
   cursor: pointer;
-  transition: background 0.1s ease, color 0.1s ease;
+  transition: background 0.08s ease, color 0.08s ease;
 }
 
 .node-menu button:hover {
