@@ -7,7 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { HexColorPicker } from 'react-colorful';
 
 // Shared registry to ensure only one select is open at a time
 const openSelects = new Set<() => void>();
@@ -113,12 +115,68 @@ export function FieldControl({
   const selectionRef = useRef<{ start: number; end: number } | null>(null);
   const isLong = field.kind === 'textarea' || stringValue.length > 42;
 
+  // Color picker state
+  const [hexDraft, setHexDraft] = useState(stringValue);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
+  const [pickerColor, setPickerColor] = useState(stringValue);
+  const swatchRef = useRef<HTMLButtonElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const colorRafRef = useRef(0);
+  const pendingColorRef = useRef<string | null>(null);
+
   // Helper to pass label editing props to all shells
   const shellLabelProps = { labelEditing, onLabelCommit };
 
   useEffect(() => {
     setDraft(stringValue);
+    setHexDraft(stringValue);
   }, [stringValue]);
+
+  // Position picker when opening
+  useEffect(() => {
+    if (!colorPickerOpen) {
+      setPickerPos(null);
+      return;
+    }
+    setPickerColor(stringValue);
+    const rect = swatchRef.current?.getBoundingClientRect();
+    if (rect) {
+      setPickerPos({ top: rect.bottom + 6, left: rect.left });
+    }
+  }, [colorPickerOpen, stringValue]);
+
+  // Commit final color when picker closes
+  useEffect(() => {
+    if (!colorPickerOpen && pendingColorRef.current) {
+      if (pendingColorRef.current !== stringValue) {
+        onChange(pendingColorRef.current);
+      }
+      pendingColorRef.current = null;
+    }
+    if (!colorPickerOpen && colorRafRef.current) {
+      cancelAnimationFrame(colorRafRef.current);
+      colorRafRef.current = 0;
+    }
+  }, [colorPickerOpen, stringValue, onChange]);
+
+  // Close color picker on click outside
+  useEffect(() => {
+    if (!colorPickerOpen) return;
+    const handleDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        pickerRef.current &&
+        !pickerRef.current.contains(target) &&
+        swatchRef.current &&
+        !swatchRef.current.contains(target)
+      ) {
+        setColorPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleDown);
+    return () => document.removeEventListener('mousedown', handleDown);
+  }, [colorPickerOpen]);
 
   useLayoutEffect(() => {
     const selection = selectionRef.current;
@@ -137,25 +195,64 @@ export function FieldControl({
   }
 
   if (field.kind === 'color') {
+    const commitHex = () => {
+      const v = hexDraft.trim();
+      if (/^#[0-9A-Fa-f]{6}$/.test(v)) {
+        onChange(v);
+      } else {
+        setHexDraft(stringValue);
+      }
+    };
+
+    const handlePickerChange = (c: string) => {
+      setPickerColor(c);
+      pendingColorRef.current = c;
+      if (!colorRafRef.current) {
+        colorRafRef.current = requestAnimationFrame(() => {
+          colorRafRef.current = 0;
+          const pending = pendingColorRef.current;
+          pendingColorRef.current = null;
+          if (pending && pending !== stringValue) {
+            onChange(pending);
+          }
+        });
+      }
+    };
+
     return (
-      <Field className="ix-field">
-        <span className="ix-control-shell">
-          <FieldLabel className="ix-control-label ix-control-label--inline">{field.label}</FieldLabel>
-          <span className="ix-color-picker-row">
-            <input
-              type="color"
-              className="nodrag ix-color-input"
-              value={stringValue || '#ffffff'}
-              onChange={(event) => onChange(event.target.value)}
+      <Field className="ix-field ix-color-field">
+        <span className="ix-control-shell ix-color-shell">
+          <FieldLabel className="ix-color-label">{field.label}</FieldLabel>
+          <span className="ix-color-picker-row nodrag">
+            <button
+              ref={swatchRef}
+              type="button"
+              className="ix-color-swatch"
+              style={{ backgroundColor: colorPickerOpen ? pickerColor : (stringValue || '#ffffff') }}
+              onClick={() => setColorPickerOpen(o => !o)}
+              aria-label="Toggle color picker"
             />
             <Input
-              ref={inputRef}
-              className="nodrag ix-color-text"
-              value={draft || '#ffffff'}
-              onChange={(event) => updateDraft(event.target.value)}
+              className="ix-color-hex-input"
+              value={hexDraft || '#ffffff'}
+              onChange={(e) => setHexDraft(e.target.value)}
+              onBlur={commitHex}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitHex(); } }}
             />
           </span>
         </span>
+        {colorPickerOpen && pickerPos &&
+          createPortal(
+            <div
+              ref={pickerRef}
+              className="ix-color-picker-dropdown"
+              style={{ position: 'fixed', top: pickerPos.top, left: pickerPos.left, zIndex: 9999 }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <HexColorPicker color={pickerColor} onChange={handlePickerChange} />
+            </div>,
+            document.body
+          )}
       </Field>
     );
   }
@@ -276,17 +373,32 @@ function NodeFieldShell({
   labelEditing?: boolean | undefined;
   onLabelCommit?: ((newLabel: string) => void) | undefined;
 }) {
+  const fieldId = useId();
+  const inputRef = useRef<HTMLElement | null>(null);
+
+  const focusInput = () => {
+    // Find the first focusable input/textarea inside the shell
+    const el = inputRef.current?.querySelector('input, textarea') as HTMLElement | null;
+    el?.focus();
+  };
+
   return (
     <Field className={`ix-field ${long ? 'long' : ''}`}>
-      <span className={`ix-control-shell ${long ? 'text-shell' : ''} ${className || ''}`}>
+      <span className={`ix-control-shell ${long ? 'text-shell' : ''} ${className || ''}`} ref={inputRef}>
         {labelEditing ? (
           <EditableLabelInline
             value={label}
             className={`ix-control-label ${long ? 'ix-control-label--floating' : 'ix-control-label--inline'}`}
-            onCommit={(v) => onLabelCommit?.(v)}
+            onCommit={(v) => { onLabelCommit?.(v); focusInput(); }}
           />
         ) : (
-          <FieldLabel className={`ix-control-label ${long ? 'ix-control-label--floating' : 'ix-control-label--inline'}`}>{label}</FieldLabel>
+          <FieldLabel
+            htmlFor={fieldId}
+            className={`ix-control-label ${long ? 'ix-control-label--floating' : 'ix-control-label--inline'}`}
+            onClick={focusInput}
+          >
+            {label}
+          </FieldLabel>
         )}
         {children}
       </span>

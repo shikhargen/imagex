@@ -1,5 +1,6 @@
 import { ChevronDown, Download, LogOut, Plus, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PrimaryActionButton } from '@/components/ui/primary-action-button';
 import { Input } from '@/components/ui/input';
 import './styles.css';
 
@@ -43,10 +44,10 @@ export function Toolbar({
         View <ChevronDown size={14} />
       </Button>
       <div className="toolbar-spacer" />
-      <Button onClick={onRun} disabled={!canRun || running} size="sm">
-        <Play size={16} fill="currentColor" />
+      <PrimaryActionButton onClick={onRun} disabled={!canRun || running}>
+        <Play size={14} fill="currentColor" />
         {running ? 'Running' : 'Run'}
-      </Button>
+      </PrimaryActionButton>
       <Button variant="outline" size="sm" type="button">
         <Download size={16} />
         Export

@@ -97,6 +97,25 @@
   opacity: 0.7;
 }
 
+.top-bar-cancel-btn {
+  height: 1.75rem !important;
+  padding: 0 0.625rem !important;
+  gap: 0.375rem !important;
+  border-radius: 9999px !important;
+  font-size: 0.6875rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em;
+  background: transparent !important;
+  color: var(--ui-text-secondary) !important;
+  border: 1px solid var(--ui-border-default) !important;
+  transition: all 0.15s ease !important;
+}
+
+.top-bar-cancel-btn:hover {
+  background: var(--ui-bg-hover) !important;
+  border-color: var(--ui-border-strong) !important;
+}
+
 @media (max-width: 860px) {
   .top-bar {
     flex-wrap: wrap;

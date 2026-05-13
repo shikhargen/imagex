@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type ComponentType, type CSSProperties } from 'react';
 import { Box, Component, FileText, Frame, Image, Layers3, MapPin, Palette, X } from 'lucide-react';
+import LogoWhite from '../logo/logo-white.svg?react';
+import { PrimaryActionButton } from '@/components/ui/primary-action-button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { setPreviewResolution } from './flow/imaging/index.js';
 import type {
@@ -93,6 +95,8 @@ export function App() {
     setStatus,
     showNotification,
     loadWorkflow: editor.restoreWorkflowSnapshot,
+    applyWorkflow: editor.applyWorkflow,
+    patchOutputNodes: editor.patchOutputNodes,
     clearHistory: editor.clearHistory,
     recordHistory: editor.recordHistory,
     syncLatestWorkflow: editor.commitFlowToWorkflow,
@@ -347,15 +351,15 @@ export function App() {
         <section className="dashboard-header">
           <div>
             <span className="brand dashboard-brand">
-              <span className="brand-mark">X</span>
+              <LogoWhite width={24} height={24} />
               imagex
             </span>
             <h1>Projects</h1>
             <p>Open a recent imagex project or create a new folder-backed project.</p>
           </div>
-          <Button onClick={() => setShowNewProject(true)}>
+          <PrimaryActionButton onClick={() => setShowNewProject(true)}>
             New Project
-          </Button>
+          </PrimaryActionButton>
         </section>
         <section className="project-grid">
           {projectActions.projects.map((item) => (
@@ -404,6 +408,7 @@ export function App() {
         onSelectWorkflow={projectActions.selectWorkflow}
         onCreateWorkflow={projectActions.createWorkflow}
         onRun={editor.runWorkflow}
+        onCancel={editor.cancelWorkflow}
         status={status}
         canRun={Boolean(workflow)}
       />

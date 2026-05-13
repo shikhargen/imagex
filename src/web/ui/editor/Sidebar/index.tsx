@@ -5,12 +5,11 @@ import {
   Image,
   Keyboard,
   Layers3,
-  Menu,
   Settings,
-  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './styles.css';
+import LogoWhite from '../../../logo/logo-white.svg?react';
 
 export type SidebarItem = {
   id: string;
@@ -24,9 +23,27 @@ export const sidebarItems: SidebarItem[] = [
   { id: 'assets', label: 'Assets', icon: Image, section: 'top' },
   { id: 'nodes', label: 'Nodes', icon: Box, section: 'top' },
   { id: 'workflows', label: 'Workflows', icon: Layers3, section: 'top' },
-  { id: 'help', label: 'Help', icon: HelpCircle, section: 'bottom', modal: true },
-  { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, section: 'bottom', modal: true },
-  { id: 'settings', label: 'Settings', icon: Settings, section: 'bottom', modal: true },
+  {
+    id: 'help',
+    label: 'Help',
+    icon: HelpCircle,
+    section: 'bottom',
+    modal: true,
+  },
+  {
+    id: 'shortcuts',
+    label: 'Shortcuts',
+    icon: Keyboard,
+    section: 'bottom',
+    modal: true,
+  },
+  {
+    id: 'settings',
+    label: 'Settings',
+    icon: Settings,
+    section: 'bottom',
+    modal: true,
+  },
 ];
 
 export function Sidebar({
@@ -78,8 +95,14 @@ export function Sidebar({
           { id: 'view-zoom-in', label: 'Zoom in' },
           { id: 'view-zoom-out', label: 'Zoom out' },
           { id: 'view-fit', label: 'Fit to screen' },
-          { id: 'view-toggle-minimap', label: showMinimap ? 'Hide minimap' : 'Show minimap' },
-          { id: 'view-toggle-inspector', label: rightOpen ? 'Hide inspector' : 'Show inspector' },
+          {
+            id: 'view-toggle-minimap',
+            label: showMinimap ? 'Hide minimap' : 'Show minimap',
+          },
+          {
+            id: 'view-toggle-inspector',
+            label: rightOpen ? 'Hide inspector' : 'Show inspector',
+          },
         ],
       },
       { type: 'separator' },
@@ -107,7 +130,11 @@ export function Sidebar({
     };
     const onMouseDown = (event: MouseEvent) => {
       if (!menuRef.current || !triggerRef.current) return;
-      if (menuRef.current.contains(event.target as Node) || triggerRef.current.contains(event.target as Node)) return;
+      if (
+        menuRef.current.contains(event.target as Node) ||
+        triggerRef.current.contains(event.target as Node)
+      )
+        return;
       setMenuOpen(false);
       setActiveMenu(null);
     };
@@ -130,35 +157,48 @@ export function Sidebar({
           <button
             ref={triggerRef}
             type="button"
-            className={`thin-sidebar-btn sidebar-menu-btn ${menuOpen ? 'active' : ''}`}
+            className={`thin-sidebar-btn sidebar-menu-btn ${
+              menuOpen ? 'active' : ''
+            }`}
             aria-haspopup="true"
             aria-expanded={menuOpen}
             aria-label="Open menu"
             onClick={() => setMenuOpen((current) => !current)}
             title="Menu"
           >
-            {menuOpen ? <X size={20} /> : <Menu size={20} />}
+            {/* {menuOpen ? <X size={20} /> : <Menu size={20} />} */}
+            <LogoWhite width={20} height={20} />
           </button>
           {menuOpen && (
             <div className="menu-shell sidebar-menu-shell" ref={menuRef}>
               <div className="menu-list">
                 {menuItems.map((item, index) => {
                   if (item.type === 'separator') {
-                    return <div key={`sep-${index}`} className="menu-separator" />;
+                    return (
+                      <div key={`sep-${index}`} className="menu-separator" />
+                    );
                   }
                   const hasSubMenu = item.items && item.items.length > 0;
                   return (
                     <div
                       key={item.id}
                       className="menu-item-container"
-                      onMouseEnter={() => hasSubMenu ? setActiveMenu(item.id!) : setActiveMenu(null)}
+                      onMouseEnter={() =>
+                        hasSubMenu
+                          ? setActiveMenu(item.id!)
+                          : setActiveMenu(null)
+                      }
                     >
                       <button
                         type="button"
-                        className={`menu-item ${activeMenu === item.id ? 'active' : ''}`}
+                        className={`menu-item ${
+                          activeMenu === item.id ? 'active' : ''
+                        }`}
                         onClick={() => {
                           if (hasSubMenu) {
-                            setActiveMenu(activeMenu === item.id ? null : item.id!);
+                            setActiveMenu(
+                              activeMenu === item.id ? null : item.id!
+                            );
                           } else {
                             onMenuAction(item.id!);
                             setMenuOpen(false);

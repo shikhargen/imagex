@@ -313,7 +313,7 @@ export function FlowEditor({
         fitView
         fitViewOptions={memoizedFitViewOptions}
         minZoom={0.25}
-        maxZoom={1.6}
+        maxZoom={2.5}
         selectionOnDrag
         selectionMode={SelectionMode.Partial}
         selectionKeyCode={null}

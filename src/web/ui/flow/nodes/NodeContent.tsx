@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, FlipHorizontal, FlipVertical, RotateCcw, RotateCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, FlipHorizontal, FlipVertical, RotateCcw, RotateCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Field, FieldLabel } from '@/components/ui/field';
 import type { ImageXNode } from '../../../../shared/types.js';
@@ -55,13 +55,60 @@ export function NodeContent({ node, onChange, onShowPrompt, connectedHandles = [
 
 function OutputContent({ node, onChange, onShowPrompt }: NodeContentProps) {
   const fields = editableFieldDefinitionsFor(node);
-  const previewUrl = typeof node.data.previewUrl === 'string' ? node.data.previewUrl : undefined;
+  const previewUrls = Array.isArray(node.data.previewUrls) ? (node.data.previewUrls as (string | null)[]) : [];
+  const previewIndex = Number(node.data.previewIndex) || 0;
+  // When previewUrls has entries, use the indexed slot (null = loading). Only fall back to previewUrl if no array.
+  const currentUrl = previewUrls.length > 0
+    ? (previewUrls[previewIndex] || undefined)
+    : (typeof node.data.previewUrl === 'string' && node.data.previewUrl ? node.data.previewUrl : undefined);
+  const hasMultiple = previewUrls.length > 1;
+  const isGenerating = Boolean(node.data.generating);
+
+  const navigate = useCallback((dir: -1 | 1) => {
+    let nextIdx = previewIndex + dir;
+    if (nextIdx < 0) nextIdx = previewUrls.length - 1;
+    if (nextIdx >= previewUrls.length) nextIdx = 0;
+    onChange(node.id, 'previewIndex', nextIdx);
+    const url = previewUrls[nextIdx];
+    if (url) onChange(node.id, 'previewUrl', url);
+  }, [node.id, onChange, previewIndex, previewUrls]);
 
   return (
     <>
       <div className="ix-output-preview">
-        {previewUrl ? <img src={previewUrl} alt="Output preview" /> : <div className="empty-preview">Preview</div>}
-        {onShowPrompt && (
+        {currentUrl ? (
+          <img src={currentUrl} alt="Output preview" />
+        ) : isGenerating ? (
+          <div className="preview-skeleton">
+            <div className="preview-skeleton-dots">
+              <span /><span /><span />
+            </div>
+          </div>
+        ) : (
+          <div className="empty-preview">Preview</div>
+        )}
+        {hasMultiple && (
+          <div className="preview-nav nodrag nopan nowheel">
+            <button
+              type="button"
+              className="preview-nav-btn"
+              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); navigate(-1); }}
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="preview-nav-counter">{previewIndex + 1}/{previewUrls.length}</span>
+            <button
+              type="button"
+              className="preview-nav-btn"
+              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); navigate(1); }}
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
+        {onShowPrompt && currentUrl && (
           <button
             className="preview-prompt-button nodrag nopan nowheel"
             type="button"

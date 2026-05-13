@@ -16,38 +16,43 @@ export async function generateCodexImages(
   options: ImageGenerationOptions,
   bearerToken: string,
   storage?: { outputDir: string; urlBase: string },
-  extraImages?: Array<{ dataUrl: string }>
+  extraImages?: Array<{ dataUrl: string }>,
+  onImage?: (image: GeneratedImage, index: number) => void
 ): Promise<GeneratedImage[]> {
-  const images: CodexImage[] = [];
-  for (let index = 0; index < options.count; index += 1) {
-    images.push(...(await requestCodexImages(options, bearerToken, extraImages)));
-  }
-
-  if (images.length === 0) {
-    throw new Error('Codex returned no generated images.');
-  }
-
   const workflowSlug = slugify(options.workflowName || 'untitled-workflow');
   const outputDir = storage?.outputDir || join(imagexPaths().outputsDir, workflowSlug);
   await mkdir(outputDir, { recursive: true });
-
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const generated: GeneratedImage[] = [];
 
-  for (const [index, image] of images.entries()) {
-    const id = randomUUID();
-    const filename = `${timestamp}-${index + 1}-${id.slice(0, 8)}.${options.outputFormat}`;
-    const path = join(outputDir, filename);
-    await writeFile(path, Buffer.from(image.b64, 'base64'));
-    const generatedImage: GeneratedImage = {
-      id,
-      path,
-      url: storage?.urlBase
-        ? `${storage.urlBase}/${encodeURIComponent(filename)}`
-        : `/outputs/${encodeURIComponent(workflowSlug)}/${encodeURIComponent(filename)}`,
-    };
-    if (image.revisedPrompt) generatedImage.revisedPrompt = image.revisedPrompt;
-    generated.push(generatedImage);
+  const generated: GeneratedImage[] = [];
+  let imageIndex = 0;
+
+  // Fire all API calls in parallel, process each as it resolves
+  const promises = Array.from({ length: options.count }, (_, i) =>
+    requestCodexImages(options, bearerToken, extraImages).then(async (images) => {
+      for (const image of images) {
+        const idx = imageIndex++;
+        const id = randomUUID();
+        const filename = `${timestamp}-${idx + 1}-${id.slice(0, 8)}.${options.outputFormat}`;
+        const path = join(outputDir, filename);
+        await writeFile(path, Buffer.from(image.b64, 'base64'));
+        const generatedImage: GeneratedImage = {
+          id,
+          path,
+          url: storage?.urlBase
+            ? `${storage.urlBase}/${encodeURIComponent(filename)}`
+            : `/outputs/${encodeURIComponent(workflowSlug)}/${encodeURIComponent(filename)}`,
+        };
+        if (image.revisedPrompt) generatedImage.revisedPrompt = image.revisedPrompt;
+        generated.push(generatedImage);
+        onImage?.(generatedImage, idx);
+      }
+    })
+  );
+  await Promise.all(promises);
+
+  if (generated.length === 0) {
+    throw new Error('Codex returned no generated images.');
   }
 
   return generated;

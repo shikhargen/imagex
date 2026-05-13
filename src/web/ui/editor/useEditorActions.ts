@@ -294,14 +294,15 @@ export function useEditorActions(deps: EditorActionsDeps) {
         workflowRef.current = synced;
         setWorkflow(synced);
       }
-      setStatus('Autosaving...');
+      // Don't overwrite status while generating
+      if (!abortRef.current) setStatus('Autosaving...');
       void fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflow`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workflow: synced }),
       })
-        .then(() => setStatus('Autosaved'))
-        .catch(() => setStatus('Autosave failed'));
+        .then(() => { if (!abortRef.current) setStatus('Autosaved'); })
+        .catch(() => { if (!abortRef.current) setStatus('Autosave failed'); });
     }, 700);
     return () => window.clearTimeout(handle);
   }, [project, workflow, nodes, edges]);
@@ -917,50 +918,141 @@ export function useEditorActions(deps: EditorActionsDeps) {
 
   // ─── Run / Compile ─────────────────────────────────────────────────────────
 
+  const abortRef = useRef<AbortController | null>(null);
+
+  /** Batch-update only specific data fields on output nodes without touching positions or triggering full workflow restore */
+  function patchOutputNodes(patches: Map<string, Record<string, unknown>>) {
+    let nextNodes = nodesRef.current;
+    for (const [nodeId, patch] of patches) {
+      const { nodes: updated } = updateNodeWorkflowData(nextNodes, nodeId, patch);
+      nextNodes = updated;
+    }
+    nodesRef.current = nextNodes;
+    setNodes(nextNodes);
+  }
+
   async function runWorkflow() {
     if (!workflow || !project) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setStatus('Generating...');
 
     const nextWorkflow = syncFlowToWorkflow(workflow, nodes, edges);
     setWorkflow(nextWorkflow);
 
-    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workflow: nextWorkflow }),
-    });
-
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: response.statusText }));
-      setStatus(body.error || 'Generation failed');
-      return;
+    // Immediately set skeleton frames on output nodes (surgical update, no full restore)
+    const outputNodes = nextWorkflow.nodes.filter((n) => n.type === 'codex-output');
+    const skeletonPatches = new Map<string, Record<string, unknown>>();
+    const urlsByNode = new Map<string, (string | null)[]>();
+    for (const node of outputNodes) {
+      const count = Math.max(1, Math.min(4, Math.trunc(Number(node.data.count) || 1)));
+      const previewUrls = Array.from({ length: count }, () => null);
+      urlsByNode.set(node.id, [...previewUrls]);
+      skeletonPatches.set(node.id, { previewUrl: '', previewUrls, previewIndex: 0, generating: true });
     }
+    patchOutputNodes(skeletonPatches);
 
-    const data = (await response.json()) as GenerateWorkflowResponse;
-    const newResults = new Map<string, OutputNodeResult>();
-    let totalImages = 0;
-    for (const r of data.results) {
-      newResults.set(r.outputNodeId, r);
-      totalImages += r.images.length;
-    }
-    setOutputResults(newResults);
-    setStatus(`Generated ${totalImages} image${totalImages === 1 ? '' : 's'}`);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflow: nextWorkflow }),
+        signal: controller.signal,
+      });
 
-    const withPreviews = {
-      ...nextWorkflow,
-      nodes: nextWorkflow.nodes.map((node) => {
-        if (node.type !== 'codex-output') return node;
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        setStatus(body || 'Generation failed');
+        const clearPatches = new Map<string, Record<string, unknown>>();
+        for (const node of outputNodes) clearPatches.set(node.id, { generating: false });
+        patchOutputNodes(clearPatches);
+        return;
+      }
+
+      // Parse SSE stream
+      const text = await response.text();
+      const lines = text.split('\n');
+      let finalResults: OutputNodeResult[] = [];
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (!data) continue;
+        try {
+          const event = JSON.parse(data);
+          if (event.type === 'image') {
+            const urls = urlsByNode.get(event.outputNodeId);
+            if (urls && event.index < urls.length) {
+              urls[event.index] = event.image.url;
+              // Surgical update: only patch the specific node's previewUrls
+              const firstUrl = urls.find((u) => u !== null) || '';
+              patchOutputNodes(new Map([[event.outputNodeId, { previewUrl: firstUrl, previewUrls: [...urls] }]]));
+            }
+          } else if (event.type === 'done') {
+            finalResults = event.results || [];
+          } else if (event.type === 'error') {
+            setStatus(event.error || 'Generation failed');
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
+      // Final state
+      const newResults = new Map<string, OutputNodeResult>();
+      let totalImages = 0;
+      for (const r of finalResults) {
+        newResults.set(r.outputNodeId, r);
+        totalImages += r.images.length;
+      }
+      setOutputResults(newResults);
+      setStatus(`Generated ${totalImages} image${totalImages === 1 ? '' : 's'}`);
+
+      // Final patch: set generating=false, final URLs
+      const finalPatches = new Map<string, Record<string, unknown>>();
+      for (const node of outputNodes) {
         const result = newResults.get(node.id);
-        const previewUrl = result?.images[0]?.url;
-        return previewUrl ? { ...node, data: { ...node.data, previewUrl } } : node;
-      }),
-    };
-    applyWorkflow(withPreviews);
-    void fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflow`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workflow: withPreviews }),
-    });
+        if (result && result.images.length > 0) {
+          finalPatches.set(node.id, {
+            previewUrl: result.images[0]?.url || '',
+            previewUrls: result.images.map((img) => img.url),
+            generating: false,
+          });
+        } else {
+          finalPatches.set(node.id, { generating: false });
+        }
+      }
+      patchOutputNodes(finalPatches);
+      abortRef.current = null;
+
+      // Save workflow with final state
+      const savedWorkflow = syncFlowToWorkflow(workflowRef.current!, nodesRef.current, edgesRef.current);
+      void fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflow: savedWorkflow }),
+      });
+    } catch (err) {
+      abortRef.current = null;
+      if ((err as Error)?.name === 'AbortError') return; // User cancelled
+      setStatus(`Generation failed: ${err}`);
+      const clearPatches = new Map<string, Record<string, unknown>>();
+      for (const node of outputNodes) clearPatches.set(node.id, { generating: false });
+      patchOutputNodes(clearPatches);
+    }
+  }
+
+  function cancelWorkflow() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setStatus('Cancelled');
+    // Clear generating state on all output nodes
+    const patches = new Map<string, Record<string, unknown>>();
+    for (const node of nodesRef.current) {
+      if (node.data.workflowNode.type === 'codex-output' && node.data.workflowNode.data.generating) {
+        patches.set(node.id, { generating: false });
+      }
+    }
+    if (patches.size > 0) patchOutputNodes(patches);
   }
 
   async function showCompiledPrompt(nodeId?: string) {
@@ -1031,6 +1123,7 @@ export function useEditorActions(deps: EditorActionsDeps) {
     redo,
     clearHistory,
     runWorkflow,
+    cancelWorkflow,
     showCompiledPrompt,
     updateFlowNodes,
     updateFlowEdges,
@@ -1041,6 +1134,7 @@ export function useEditorActions(deps: EditorActionsDeps) {
     handlePlacingMove,
     handlePlacingDrop,
     applyWorkflow,
+    patchOutputNodes,
     restoreWorkflowSnapshot,
     commitFlowToWorkflow,
     selectAssetForField: selectAssetForFieldImpl,

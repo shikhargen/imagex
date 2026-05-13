@@ -1,5 +1,6 @@
-import { Play, Plus } from 'lucide-react';
+import { Play, Plus, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PrimaryActionButton } from '@/components/ui/primary-action-button';
 import './styles.css';
 
 export type TopBarWorkflow = {
@@ -13,6 +14,7 @@ export function TopBar({
   onSelectWorkflow,
   onCreateWorkflow,
   onRun,
+  onCancel,
   status,
   canRun,
 }: {
@@ -21,6 +23,7 @@ export function TopBar({
   onSelectWorkflow: (id: string) => void;
   onCreateWorkflow: () => void;
   onRun: () => void;
+  onCancel?: () => void;
   status: string;
   canRun: boolean;
 }) {
@@ -51,10 +54,17 @@ export function TopBar({
       </div>
       <div className="top-bar-actions">
         <span className="top-bar-status">{status}</span>
-        <Button onClick={onRun} disabled={!canRun || running} size="sm">
-          <Play size={14} fill="currentColor" />
-          {running ? 'Running' : 'Run'}
-        </Button>
+        {running ? (
+          <Button onClick={onCancel} size="sm" variant="secondary" className="top-bar-cancel-btn">
+            <Square size={10} fill="currentColor" />
+            Cancel
+          </Button>
+        ) : (
+          <PrimaryActionButton onClick={onRun} disabled={!canRun}>
+            <Play size={11} fill="currentColor" />
+            Run
+          </PrimaryActionButton>
+        )}
       </div>
     </header>
   );

@@ -308,8 +308,7 @@ function buildOptions(prompt: string, output: ImageXNode | undefined, workflowNa
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function imageCountInstruction(count: number): string {
-  const n = count === 1 ? '1 image' : `${count} images`;
-  return `Generate ${n} based on the following structured description. Preserve explicit user values and do not invent unrelated logos, watermarks, or extra text.`;
+  return `Generate an image based on the following structured description. Preserve explicit user values and do not invent unrelated logos, watermarks, or extra text.`;
 }
 
 const defaultLabels: Record<string, string> = {
