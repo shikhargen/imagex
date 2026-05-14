@@ -17,6 +17,7 @@ import { useCanvasRenderer } from '../imaging/useCanvasRenderer.js';
 import { graphEngine } from '../../../state/graphEngine.js';
 import { loadImage, renderToCanvas } from '../imaging/pipeline.js';
 import { isWasmReady, applyWasmStep } from '../imaging/wasmEngine.js';
+import { PreviewImage } from '../imaging/PreviewImage.js';
 import { nodeMeta } from '../meta.js';
 import { RotateFlipView } from '../views/RotateFlipView.js';
 import { NodeFields } from './parts/NodeFields.js';
@@ -77,7 +78,7 @@ function OutputContent({ node, onChange, onShowPrompt }: NodeContentProps) {
     <>
       <div className="ix-output-preview">
         {currentUrl ? (
-          <img src={currentUrl} alt="Output preview" />
+          <PreviewImage src={currentUrl} alt="Output preview" />
         ) : isGenerating ? (
           <div className="preview-skeleton">
             <div className="preview-skeleton-dots">

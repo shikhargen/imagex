@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type {
-  GeneratedImage,
+  GenerationJobStatus,
   ImageXAsset,
   ImageXEdge,
   ImageXNode,
@@ -105,47 +105,53 @@ export function useProjectActions(deps: ProjectActionsDeps) {
     try {
       const res = await fetch(`/api/projects/${encodeURIComponent(proj.metadata.id)}/generate-status`);
       if (!res.ok) return;
-      const data = await res.json() as { active: boolean; status: string; counts?: Record<string, number>; images?: Record<string, (GeneratedImage | null)[]>; error?: string };
+      const data = await res.json() as GenerationJobStatus;
+      applyGenerationStatus(data);
       if (!data.active && data.status !== 'running') return;
-
-      // Restore generating state with current progress (surgical patch, no position reset)
-      setStatus('Generating...');
-      const patches = new Map<string, Record<string, unknown>>();
-      for (const [nodeId, count] of Object.entries(data.counts || {})) {
-        const nodeImages = data.images?.[nodeId] || [];
-        const previewUrls = Array.from({ length: count }, (_, i) => nodeImages[i]?.url || null);
-        const firstUrl = previewUrls.find((u) => u !== null) || '';
-        patches.set(nodeId, { previewUrl: firstUrl, previewUrls, previewIndex: 0, generating: true });
-      }
-      patchOutputNodes(patches);
 
       // Poll until done (every 5s)
       const pollInterval = setInterval(async () => {
         try {
           const pollRes = await fetch(`/api/projects/${encodeURIComponent(proj.metadata.id)}/generate-status`);
           if (!pollRes.ok) { clearInterval(pollInterval); return; }
-          const pollData = await pollRes.json() as typeof data;
-
-          const updatePatches = new Map<string, Record<string, unknown>>();
-          for (const [nodeId, count] of Object.entries(pollData.counts || {})) {
-            const nodeImages = pollData.images?.[nodeId] || [];
-            const previewUrls = Array.from({ length: count }, (_, i) => nodeImages[i]?.url || null);
-            const firstUrl = previewUrls.find((u) => u !== null) || '';
-            const allDone = previewUrls.every((u) => u !== null);
-            updatePatches.set(nodeId, { previewUrl: firstUrl, previewUrls, generating: !allDone && pollData.status === 'running' });
-          }
-          patchOutputNodes(updatePatches);
+          const pollData = await pollRes.json() as GenerationJobStatus;
+          applyGenerationStatus(pollData);
 
           if (pollData.status !== 'running') {
             clearInterval(pollInterval);
-            const totalImages = Object.values(pollData.images || {}).flat().filter(Boolean).length;
-            setStatus(pollData.status === 'done' ? `Generated ${totalImages} image${totalImages === 1 ? '' : 's'}` : (pollData.error || 'Generation failed'));
           }
         } catch {
           clearInterval(pollInterval);
         }
       }, 5000);
     } catch { /* ignore */ }
+  }
+
+  function applyGenerationStatus(data: GenerationJobStatus) {
+    const patches = new Map<string, Record<string, unknown>>();
+    for (const [nodeId, state] of Object.entries(data.outputs || {})) {
+      patches.set(nodeId, {
+        previewUrl: state.images[0]?.url || '',
+        previewUrls: state.images.map((image) => image.url),
+        previewIndex: 0,
+        generating: state.status === 'queued' || state.status === 'running',
+        generation: state,
+      });
+    }
+    if (patches.size > 0) patchOutputNodes(patches);
+    if (data.results?.length) {
+      setOutputResults(new Map(data.results.map((result) => [result.outputNodeId, result])));
+    }
+    if (data.active || data.status === 'running') {
+      setStatus('Generating...');
+    } else if (data.status === 'error') {
+      setStatus(data.error || 'Something went wrong');
+    } else if (data.status === 'cancelled') {
+      setStatus('Cancelled');
+    } else if (data.results?.length) {
+      const totalImages = data.results.reduce((sum, result) => sum + result.images.length, 0);
+      setStatus(`Generated ${totalImages} image${totalImages === 1 ? '' : 's'}`);
+    }
   }
 
   function nodeAssetPayload(rootNodeId: string): { rootNodeId: string; nodes: ImageXNode[]; edges: ImageXEdge[] } | null {

@@ -3,6 +3,8 @@ import type {
   CustomFieldDefinition,
   CustomFieldKind,
   GenerateWorkflowResponse,
+  GenerationJobStatus,
+  GenerationRunMode,
   ImageXAsset,
   ImageXEdge,
   ImageXNode,
@@ -931,97 +933,135 @@ export function useEditorActions(deps: EditorActionsDeps) {
     setNodes(nextNodes);
   }
 
-  async function runWorkflow() {
+  function applyGenerationStatus(job: GenerationJobStatus) {
+    const patches = new Map<string, Record<string, unknown>>();
+    for (const [nodeId, state] of Object.entries(job.outputs || {})) {
+      patches.set(nodeId, {
+        previewUrl: state.images[0]?.url || '',
+        previewUrls: state.images.map((image) => image.url),
+        previewIndex: 0,
+        generating: state.status === 'queued' || state.status === 'running',
+        generation: state,
+      });
+    }
+    if (patches.size > 0) patchOutputNodes(patches);
+
+    if (job.results?.length) {
+      setOutputResults(new Map(job.results.map((result) => [result.outputNodeId, result])));
+    }
+
+    if (job.active || job.status === 'running') {
+      setStatus('Generating...');
+      return;
+    }
+    if (job.status === 'cancelled') {
+      setStatus('Cancelled');
+      return;
+    }
+    if (job.status === 'error') {
+      setStatus(job.error || 'Something went wrong');
+      return;
+    }
+    if (job.results?.length) {
+      const totalImages = job.results.reduce((sum, result) => sum + result.images.length, 0);
+      setStatus(`Generated ${totalImages} image${totalImages === 1 ? '' : 's'}`);
+    }
+  }
+
+  async function consumeGenerationStream(response: Response) {
+    if (!response.body) {
+      const text = await response.text();
+      for (const event of parseSseEvents(text)) handleGenerationEvent(event);
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+      for (const part of parts) {
+        for (const event of parseSseEvents(part)) handleGenerationEvent(event);
+      }
+    }
+    buffer += decoder.decode();
+    for (const event of parseSseEvents(buffer)) handleGenerationEvent(event);
+  }
+
+  function parseSseEvents(text: string): any[] {
+    const events: any[] = [];
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (!data) continue;
+      try {
+        events.push(JSON.parse(data));
+      } catch {
+        // Ignore malformed chunks; the final status poll reconciles state.
+      }
+    }
+    return events;
+  }
+
+  function handleGenerationEvent(event: any) {
+    if (event?.job) applyGenerationStatus(event.job as GenerationJobStatus);
+    if (event?.type === 'done') {
+      const results = Array.isArray(event.results) ? event.results as OutputNodeResult[] : [];
+      const newResults = new Map<string, OutputNodeResult>();
+      let totalImages = 0;
+      for (const result of results) {
+        newResults.set(result.outputNodeId, result);
+        totalImages += result.images.length;
+      }
+      setOutputResults(newResults);
+      setStatus(`Generated ${totalImages} image${totalImages === 1 ? '' : 's'}`);
+    } else if (event?.type === 'error') {
+      setStatus(event.error || 'Something went wrong');
+    }
+  }
+
+  async function runWorkflow(mode: GenerationRunMode = 'selected') {
     if (!workflow || !project) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    setStatus('Generating...');
 
     const nextWorkflow = syncFlowToWorkflow(workflow, nodes, edges);
     setWorkflow(nextWorkflow);
 
-    // Immediately set skeleton frames on output nodes (surgical update, no full restore)
-    const outputNodes = nextWorkflow.nodes.filter((n) => n.type === 'codex-output');
-    const skeletonPatches = new Map<string, Record<string, unknown>>();
-    const urlsByNode = new Map<string, (string | null)[]>();
-    for (const node of outputNodes) {
-      const count = Math.max(1, Math.min(4, Math.trunc(Number(node.data.count) || 1)));
-      const previewUrls = Array.from({ length: count }, () => null);
-      urlsByNode.set(node.id, [...previewUrls]);
-      skeletonPatches.set(node.id, { previewUrl: '', previewUrls, previewIndex: 0, generating: true });
+    const selectedOutputs = selectedNodeIds().filter((id) =>
+      nextWorkflow.nodes.some((node) => node.id === id && node.type === 'codex-output')
+    );
+    if (mode !== 'all' && selectedOutputs.length === 0) {
+      setStatus('Select an output node to run');
+      abortRef.current = null;
+      return;
     }
-    patchOutputNodes(skeletonPatches);
+    setStatus('Generating...');
 
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow: nextWorkflow }),
+        body: JSON.stringify({
+          workflow: nextWorkflow,
+          outputNodeIds: mode === 'all' ? [] : selectedOutputs,
+          mode,
+        }),
         signal: controller.signal,
       });
 
       if (!response.ok) {
         const body = await response.text().catch(() => '');
         setStatus(body || 'Generation failed');
-        const clearPatches = new Map<string, Record<string, unknown>>();
-        for (const node of outputNodes) clearPatches.set(node.id, { generating: false });
-        patchOutputNodes(clearPatches);
         return;
       }
 
-      // Parse SSE stream
-      const text = await response.text();
-      const lines = text.split('\n');
-      let finalResults: OutputNodeResult[] = [];
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6).trim();
-        if (!data) continue;
-        try {
-          const event = JSON.parse(data);
-          if (event.type === 'image') {
-            const urls = urlsByNode.get(event.outputNodeId);
-            if (urls && event.index < urls.length) {
-              urls[event.index] = event.image.url;
-              // Surgical update: only patch the specific node's previewUrls
-              const firstUrl = urls.find((u) => u !== null) || '';
-              patchOutputNodes(new Map([[event.outputNodeId, { previewUrl: firstUrl, previewUrls: [...urls] }]]));
-            }
-          } else if (event.type === 'done') {
-            finalResults = event.results || [];
-          } else if (event.type === 'error') {
-            setStatus(event.error || 'Generation failed');
-          }
-        } catch { /* ignore parse errors */ }
-      }
-
-      // Final state
-      const newResults = new Map<string, OutputNodeResult>();
-      let totalImages = 0;
-      for (const r of finalResults) {
-        newResults.set(r.outputNodeId, r);
-        totalImages += r.images.length;
-      }
-      setOutputResults(newResults);
-      setStatus(`Generated ${totalImages} image${totalImages === 1 ? '' : 's'}`);
-
-      // Final patch: set generating=false, final URLs
-      const finalPatches = new Map<string, Record<string, unknown>>();
-      for (const node of outputNodes) {
-        const result = newResults.get(node.id);
-        if (result && result.images.length > 0) {
-          finalPatches.set(node.id, {
-            previewUrl: result.images[0]?.url || '',
-            previewUrls: result.images.map((img) => img.url),
-            generating: false,
-          });
-        } else {
-          finalPatches.set(node.id, { generating: false });
-        }
-      }
-      patchOutputNodes(finalPatches);
+      await consumeGenerationStream(response);
       abortRef.current = null;
 
       // Save workflow with final state
@@ -1035,13 +1075,27 @@ export function useEditorActions(deps: EditorActionsDeps) {
       abortRef.current = null;
       if ((err as Error)?.name === 'AbortError') return; // User cancelled
       setStatus(`Generation failed: ${err}`);
-      const clearPatches = new Map<string, Record<string, unknown>>();
-      for (const node of outputNodes) clearPatches.set(node.id, { generating: false });
-      patchOutputNodes(clearPatches);
+      void refreshGenerationStatus();
     }
   }
 
-  function cancelWorkflow() {
+  async function refreshGenerationStatus() {
+    const currentProject = projectRef.current;
+    if (!currentProject) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(currentProject.metadata.id)}/generate-status`);
+    if (!response.ok) return;
+    applyGenerationStatus(await response.json() as GenerationJobStatus);
+  }
+
+  async function cancelWorkflow() {
+    const currentProject = projectRef.current;
+    if (currentProject) {
+      await fetch(`/api/projects/${encodeURIComponent(currentProject.metadata.id)}/generate/cancel`, {
+        method: 'POST',
+      }).then(async (response) => {
+        if (response.ok) applyGenerationStatus(await response.json() as GenerationJobStatus);
+      }).catch(() => undefined);
+    }
     abortRef.current?.abort();
     abortRef.current = null;
     setStatus('Cancelled');
@@ -1124,6 +1178,7 @@ export function useEditorActions(deps: EditorActionsDeps) {
     clearHistory,
     runWorkflow,
     cancelWorkflow,
+    refreshGenerationStatus,
     showCompiledPrompt,
     updateFlowNodes,
     updateFlowEdges,

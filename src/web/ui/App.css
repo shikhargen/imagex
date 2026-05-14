@@ -41,7 +41,7 @@
 .empty-dashboard {
   min-height: 8.889rem;
   border: 1px solid var(--ui-border-default);
-  border-radius: var(--ui-radius-xl);
+  border-radius: var(--ui-radius-lg);
   padding: var(--ui-space-7);
   color: var(--ui-text-primary);
   background: var(--ui-bg-overlay);
@@ -181,13 +181,15 @@
 }
 
 .dialog-actions .danger {
-  border-color: var(--ui-color-danger-border);
+  border-color: var(--ui-color-danger);
   background: var(--ui-color-danger-bg);
-  color: var(--ui-text-primary);
+  color: var(--ui-color-danger);
 }
 
 .dialog-actions .danger:hover {
   background: var(--ui-color-danger);
+  color: var(--ui-bg-base);
+  border-color: var(--ui-color-danger);
 }
 
 .node-popup-backdrop {
@@ -249,7 +251,7 @@
   align-items: center;
   min-height: 2.556rem;
   padding: var(--ui-space-2) var(--ui-space-3);
-  border-radius: var(--ui-radius-sm);
+  border-radius: calc(var(--ui-radius-lg) - 4px);
   text-align: left;
   white-space: normal;
   transition: background 0.15s;
@@ -492,7 +494,7 @@
   gap: var(--ui-space-3);
 }
 
-.template-choice {
+[data-slot='button'].template-choice {
   display: grid;
   gap: var(--ui-space-2);
   justify-items: start;
@@ -506,7 +508,7 @@
   transition: border-color 0.2s, background 0.2s;
 }
 
-.template-choice:hover {
+[data-slot='button'].template-choice:hover {
   border-color: var(--ui-border-default);
   background: var(--ui-bg-overlay);
 }
@@ -547,7 +549,7 @@
   width: 100%;
   justify-content: flex-start;
   border: 0;
-  border-radius: var(--ui-radius-sm);
+  border-radius: calc(var(--ui-radius-lg) - 4px);
   padding: 0.375rem 0.625rem;
   color: var(--ui-text-secondary);
   background: transparent;
@@ -594,7 +596,7 @@
   background: var(--ui-bg-overlay);
 }
 
-.template-choice.selected {
+[data-slot='button'].template-choice.selected {
   border-color: var(--ui-border-accent);
   box-shadow: 0 0 0 1px var(--ui-border-accent) inset;
 }

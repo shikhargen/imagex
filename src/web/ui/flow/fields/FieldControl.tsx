@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { HexColorPicker } from 'react-colorful';
+import { PreviewImage } from '../imaging/PreviewImage.js';
 
 // Shared registry to ensure only one select is open at a time
 const openSelects = new Set<() => void>();
@@ -270,7 +271,7 @@ export function FieldControl({
             )}
             {assetPreviewUrl && (
               <figure className="ix-asset-preview">
-                <img src={assetPreviewUrl} alt="" />
+                <PreviewImage src={assetPreviewUrl} alt="" />
               </figure>
             )}
             {!onOpenAssets && !assetPreviewUrl && (
@@ -335,7 +336,7 @@ export function FieldControl({
           </Button>
           {assetPreviewUrl && (
             <figure className="ix-asset-preview">
-              <img src={assetPreviewUrl} alt="" />
+              <PreviewImage src={assetPreviewUrl} alt="" />
             </figure>
           )}
         </div>

@@ -60,17 +60,6 @@
   background: var(--ui-accent);
 }
 
-.top-bar-tab:hover {
-  background: var(--ui-bg-hover);
-  color: var(--ui-text-secondary);
-}
-
-.top-bar-tab.active {
-  background: var(--ui-bg-active);
-  color: var(--ui-text-primary);
-  font-weight: 600;
-}
-
 .top-bar-tab-add {
   padding: var(--ui-space-2);
   color: var(--ui-text-dim);
@@ -97,23 +86,136 @@
   opacity: 0.7;
 }
 
-.top-bar-cancel-btn {
-  height: 1.75rem !important;
-  padding: 0 0.625rem !important;
-  gap: 0.375rem !important;
-  border-radius: 9999px !important;
-  font-size: 0.6875rem !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.02em;
-  background: transparent !important;
-  color: var(--ui-text-secondary) !important;
-  border: 1px solid var(--ui-border-default) !important;
-  transition: all 0.15s ease !important;
+/* ─── Split Run Button (outline style like download node) ──────────────────── */
+
+.run-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
 }
 
-.top-bar-cancel-btn:hover {
-  background: var(--ui-bg-hover) !important;
-  border-color: var(--ui-border-strong) !important;
+.ix-split-button {
+  display: inline-flex;
+  align-items: stretch;
+  height: 1.75rem;
+  border: 1px solid var(--ui-border-strong);
+  background: transparent;
+  color: var(--ui-text-secondary);
+  overflow: hidden;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease, border-radius 0.15s ease;
+  border-radius: var(--ui-radius-md);
+}
+
+.ix-split-button.is-running {
+  opacity: 0.65;
+}
+
+.ix-split-button:hover:not(.is-running) {
+  border-color: var(--ui-accent);
+  background: var(--ui-bg-hover);
+}
+
+.ix-split-button:hover:not(.is-running) .ix-split-button-main,
+.ix-split-button:hover:not(.is-running) .ix-split-button-trigger {
+  color: var(--ui-accent-text);
+}
+
+/* When menu is open, keep the same round shape — just tint like hover */
+.ix-split-button.is-open {
+  border-color: var(--ui-accent);
+  background: var(--ui-bg-hover);
+}
+
+.ix-split-button.is-open .ix-split-button-main,
+.ix-split-button.is-open .ix-split-button-trigger {
+  color: var(--ui-accent-text);
+}
+
+.ix-split-button-main,
+.ix-split-button-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.1s ease;
+}
+
+.ix-split-button-main {
+  padding: 0 0.625rem 0 0.875rem;
+}
+
+.ix-split-button-trigger {
+  padding: 0 0.625rem;
+  min-width: 1.75rem;
+}
+
+.ix-split-button-separator {
+  align-self: center;
+  width: 1px;
+  height: 1rem;
+  background: var(--ui-border-default);
+  flex-shrink: 0;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.ix-split-button:hover:not(.is-running) .ix-split-button-separator,
+.ix-split-button.is-open .ix-split-button-separator {
+  background: var(--ui-accent);
+  opacity: 0.35;
+}
+
+.ix-split-button-main:disabled,
+.ix-split-button-trigger:disabled {
+  cursor: not-allowed;
+}
+
+/* ─── Run options dropdown (matches .menu-shell flyout style) ─────────────── */
+
+.run-menu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  min-width: 10rem;
+  z-index: 20;
+  padding: 0.25rem;
+  border: 1px solid var(--ui-border-default);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-bg-surface);
+  box-shadow: var(--ui-shadow-lg);
+  animation: ix-dropdown-enter 0.1s ease;
+}
+
+.run-menu button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: calc(var(--ui-radius-lg) - 4px);
+  background: transparent;
+  color: var(--ui-text-secondary);
+  padding: 0.375rem 0.625rem;
+  font-size: var(--ui-text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.08s ease, color 0.08s ease, border-color 0.08s ease;
+}
+
+.run-menu button:hover:not(:disabled) {
+  background: var(--ui-bg-hover);
+  color: var(--ui-text-primary);
+  border-color: var(--ui-accent);
+}
+
+.run-menu button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 @media (max-width: 860px) {

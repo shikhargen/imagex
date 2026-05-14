@@ -515,7 +515,7 @@
   color: var(--ui-text-secondary) !important;
   font-size: var(--ui-text-sm) !important;
   padding: 0.375rem 0.625rem !important;
-  border-radius: var(--ui-radius-sm) !important;
+  border-radius: calc(var(--ui-radius-lg) - 4px) !important;
   cursor: pointer;
   transition: background 0.08s ease, color 0.08s ease !important;
 }

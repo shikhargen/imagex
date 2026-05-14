@@ -17,7 +17,8 @@ export async function generateCodexImages(
   bearerToken: string,
   storage?: { outputDir: string; urlBase: string },
   extraImages?: Array<{ dataUrl: string }>,
-  onImage?: (image: GeneratedImage, index: number) => void
+  onImage?: (image: GeneratedImage, index: number) => void | Promise<void>,
+  signal?: AbortSignal
 ): Promise<GeneratedImage[]> {
   const workflowSlug = slugify(options.workflowName || 'untitled-workflow');
   const outputDir = storage?.outputDir || join(imagexPaths().outputsDir, workflowSlug);
@@ -29,8 +30,9 @@ export async function generateCodexImages(
 
   // Fire all API calls in parallel, process each as it resolves
   const promises = Array.from({ length: options.count }, (_, i) =>
-    requestCodexImages(options, bearerToken, extraImages).then(async (images) => {
+    requestCodexImages(options, bearerToken, extraImages, signal).then(async (images) => {
       for (const image of images) {
+        if (signal?.aborted) throw new Error('Generation cancelled');
         const idx = imageIndex++;
         const id = randomUUID();
         const filename = `${timestamp}-${idx + 1}-${id.slice(0, 8)}.${options.outputFormat}`;
@@ -45,7 +47,7 @@ export async function generateCodexImages(
         };
         if (image.revisedPrompt) generatedImage.revisedPrompt = image.revisedPrompt;
         generated.push(generatedImage);
-        onImage?.(generatedImage, idx);
+        await onImage?.(generatedImage, idx);
       }
     })
   );
@@ -61,7 +63,8 @@ export async function generateCodexImages(
 async function requestCodexImages(
   options: ImageGenerationOptions,
   bearerToken: string,
-  extraImages?: Array<{ dataUrl: string }>
+  extraImages?: Array<{ dataUrl: string }>,
+  signal?: AbortSignal
 ): Promise<CodexImage[]> {
   const content: Array<Record<string, unknown>> = [];
 
@@ -88,7 +91,7 @@ async function requestCodexImages(
     text: options.prompt,
   });
 
-  const response = await fetch(codexResponsesUrl, {
+  const init: RequestInit = {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${bearerToken}`,
@@ -118,7 +121,9 @@ async function requestCodexImages(
       stream: true,
       store: false,
     }),
-  });
+  };
+  if (signal) init.signal = signal;
+  const response = await fetch(codexResponsesUrl, init);
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');

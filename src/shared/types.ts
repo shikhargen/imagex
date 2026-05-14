@@ -197,8 +197,40 @@ export type OutputNodeResult = {
   outputNodeId: string;
   prompt: string;
   images: GeneratedImage[];
+  status?: 'queued' | 'running' | 'done' | 'partial' | 'error' | 'cancelled' | 'skipped';
+  error?: string;
 };
 
 export type GenerateWorkflowResponse = {
   results: OutputNodeResult[];
+};
+
+export type GenerationRunMode = 'selected' | 'forced' | 'all';
+
+export type OutputNodeGenerationState = {
+  jobId?: string;
+  status: 'queued' | 'running' | 'done' | 'partial' | 'error' | 'cancelled';
+  prompt?: string;
+  images: GeneratedImage[];
+  expectedCount: number;
+  error?: string;
+  updatedAt: string;
+};
+
+export type GenerateWorkflowRunRequest = {
+  workflow: ImageXWorkflow;
+  outputNodeIds?: string[];
+  mode?: GenerationRunMode;
+};
+
+export type GenerationJobStatus = {
+  active: boolean;
+  jobId?: string;
+  status?: 'running' | 'done' | 'error' | 'cancelled';
+  mode?: GenerationRunMode;
+  requestedOutputNodeIds?: string[];
+  plannedOutputNodeIds?: string[];
+  outputs?: Record<string, OutputNodeGenerationState>;
+  results?: OutputNodeResult[];
+  error?: string;
 };

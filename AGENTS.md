@@ -32,7 +32,8 @@ The current checkout is a Vite/React web app plus a local Express daemon. Do not
 - `src/shared/types.ts` for persisted workflow, project, node, asset, and generation schemas.
 - `src/web/ui/flow/meta.ts`, `src/web/ui/flow/ports.ts`, and `src/web/ui/flow/fields/definitions.ts` for node catalog, port compatibility, and field definitions.
 - `src/workflows/compiler.ts` for graph-to-prompt compilation.
-- `src/daemon/server.ts` for API routes, project generation, output-node ordering, image-reference resolution, and server-side image transforms.
+- `src/daemon/server.ts` for API routes, durable generation jobs, output-node run planning, image-reference resolution, and server-side image transforms.
+- `src/providers/codexImage.ts` for the Codex Responses image tool transport. `CODEX_API_BASE` can point to a local mock endpoint during development.
 - `src/projects/store.ts` and `src/workflows/store.ts` for local persistence.
 - `src/web/state/flowStore.ts`, `src/web/state/graphEngine.ts`, and `src/web/ui/flow/imaging/` for the performance-sensitive editor and preview pipeline.
 - `src/web/ui/editor/useEditorActions.ts` and `src/web/ui/editor/useProjectActions.ts` for workflow, project, generation, asset, undo/redo, and autosave behavior.
@@ -46,11 +47,29 @@ Gitignored local notes may exist. Treat them as private context only; do not quo
 - Preserve the drag performance model: `handleNodesChange` filters position/dimension changes during drag, and final positions are synced on drag stop.
 - `App.tsx` currently orchestrates top-level UI state with `useEditorActions` and `useProjectActions`. `src/web/state/editorStore.ts` exists, but verify active usage before moving logic into it.
 - `GraphEngine` evaluates image-producing nodes, caches outputs per node, and propagates downstream changes through edges. Use the `ongoing` flag for live slider/drag updates so expensive downstream propagation waits until commit.
-- Image previews use `useCanvasRenderer`, `processWithWasm`, and `PREVIEW_MAX_WIDTH` downscaling. Full-resolution download/server paths must not accidentally reuse preview-scale coordinates.
+- Edit-node previews use `useCanvasRenderer`, `processWithWasm`, and `PREVIEW_MAX_WIDTH` downscaling. Output-node and image-selector previews use `PreviewImage` to cap browser preview decoding at 2048px on the long edge. Full-resolution download/server paths must not accidentally reuse preview-scale coordinates.
 - Photon `putImageData` consumes its `PhotonImage`. Do not call `.free()` on an image after passing it to `putImageData`.
 - Prompt compilation is structured data, not prose concatenation. Nodes compile into nested JSON objects; duplicate field labels become arrays; image placeholders start as `__imagex_ref` markers and are post-processed into `[image-N]` references.
 - Image-editing nodes generally pass image references through the compiler; actual transforms are applied by the frontend preview path and mirrored on the daemon before generation.
-- Generation with multiple output nodes must keep topological ordering and detect circular output dependencies.
+- Each `codex-output` node corresponds to one generation target. Output nodes may depend on other output nodes; generation planning must keep topological order, detect circular output dependencies, and run independent topo levels in parallel.
+- Duplicated output nodes may keep their previous preview, but connecting or reconnecting a new input into an output node must clear that output node's stale `previewUrl`, `previewUrls`, `generation`, and `generating` fields.
+
+## Generation Architecture
+
+- Project generation is a durable daemon-managed job system, not client-only state. Shared types live in `src/shared/types.ts` (`GenerationRunMode`, `GenerationJobStatus`, `OutputNodeGenerationState`).
+- Run modes are:
+  - `selected`: run selected output nodes; run empty upstream output dependencies first, but reuse stored upstream output results when present.
+  - `forced`: run selected output nodes and all upstream output dependencies again.
+  - `all`: run every output node as a forced run in dependency order.
+- Per-output generation state is stored on each output node under `node.data.generation`, with `node.data.generating` used by the UI to keep Run disabled across refreshes.
+- Per-run assets and metadata are stored under the project output directory:
+  - `outputs/runs/index.json` tracks the newest 50 run records in chronological creation order.
+  - `outputs/runs/<job-id>/job.json` stores the full run record.
+  - `outputs/runs/<job-id>/<output-node-id>/` stores generated files for that output node.
+- `/api/projects/:projectId/generate-status` is the recovery source of truth after refresh or daemon restart. If a persisted job is still marked running but no active in-memory job exists, reconcile it to `partial` or `error` based on saved images.
+- `/api/projects/:projectId/generate/cancel` aborts the active provider requests and persists partial output state. UI cancel controls should call this endpoint before clearing local state.
+- Do not reintroduce client-only polling as the source of truth for generation progress. Stream events and polling should both apply the same `GenerationJobStatus` shape.
+- Project output file-serving supports nested `outputs/runs/...` paths and must preserve path traversal checks.
 
 ## Product And UX Direction
 
@@ -79,6 +98,8 @@ When changing image operations, keep frontend preview, full-resolution download,
 
 When changing providers or auth, keep all provider-specific code isolated under `src/providers/` and `src/auth/`, then thread only typed options through the daemon/UI. Do not mix API-key and OAuth flows without an explicit product decision.
 
+When changing generation provider behavior, keep `CODEX_API_BASE` override support intact. A separate local mock service may live outside this repo at `/home/shikhar/Projects/codex-image-mock-service`; do not document it as a required dependency for ImageX.
+
 When changing persistence, include schema compatibility for existing files under `IMAGEX_HOME` or `~/.imagex`.
 
 ## Data, Auth, And Security
@@ -87,6 +108,7 @@ When changing persistence, include schema compatibility for existing files under
 - Auth is stored in `auth.json` with restrictive permissions. Never commit credentials, generated project data, `.env`, or outputs.
 - Project assets and outputs are served through daemon routes that guard against path traversal. Preserve those checks when touching file-serving code.
 - Avoid adding telemetry or external network calls outside explicit auth/generation flows.
+- For local generation testing without real network image calls, start ImageX with `CODEX_API_BASE=http://127.0.0.1:8787/backend-api/codex/responses` only when a local mock service is intentionally running.
 
 ## Code Quality Choices
 

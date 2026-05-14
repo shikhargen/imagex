@@ -399,6 +399,15 @@ export function App() {
   }
 
   // ─── Editor view ───────────────────────────────────────────────────────────
+  const selectedOutputCount = editor.selectedNodeIds().filter((id) =>
+    editor.nodes.some((node) => node.id === id && node.type === 'codex-output')
+  ).length;
+  const generationActive = editor.nodes.some((node) => {
+    if (node.type !== 'codex-output') return false;
+    const data = node.data.workflowNode.data;
+    const generation = data.generation as { status?: string } | undefined;
+    return Boolean(data.generating) || generation?.status === 'queued' || generation?.status === 'running';
+  });
 
   return (
     <main className="app-shell">
@@ -411,6 +420,8 @@ export function App() {
         onCancel={editor.cancelWorkflow}
         status={status}
         canRun={Boolean(workflow)}
+        selectedOutputCount={selectedOutputCount}
+        generationActive={generationActive}
       />
       <div
         className={`app-body ${activeSidePanel ? 'side-panel-open' : ''} ${rightOpen ? '' : 'right-collapsed'}`}

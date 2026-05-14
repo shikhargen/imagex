@@ -36,7 +36,7 @@ export function createDefaultWorkflow(): ImageXWorkflow {
       },
     ],
     edges: [
-      { id: 'prompt-to-output', source: 'prompt-1', sourceHandle: 'text-out', target: 'output-1', targetHandle: 'text-in' },
+      { id: 'prompt-to-output', source: 'prompt-1', sourceHandle: 'text-out', target: 'output-1', targetHandle: 'input-in' },
     ],
   };
 }

@@ -144,6 +144,8 @@ export function FlowEditor({
       onBeforeChange();
       const source = currentNodes.find((node) => node.id === connection.source);
       const target = currentNodes.find((node) => node.id === connection.target);
+      const nextNodes = resetOutputPreviewForTarget(currentNodes, target);
+      if (nextNodes !== currentNodes) flowStore.setNodes(nextNodes);
       const nextEdges = addEdge(styleConnection(connection, source, target), currentEdges);
       flowStore.setEdges(nextEdges);
     },
@@ -160,6 +162,8 @@ export function FlowEditor({
       edgeReconnectSuccessful.current = true;
       const source = currentNodes.find((node) => node.id === newConnection.source);
       const target = currentNodes.find((node) => node.id === newConnection.target);
+      const nextNodes = resetOutputPreviewForTarget(currentNodes, target);
+      if (nextNodes !== currentNodes) flowStore.setNodes(nextNodes);
       const nextEdges = currentEdges.map((edge) =>
         edge.id === oldEdge.id ? { ...styleConnection(newConnection, source, target), id: oldEdge.id } : edge
       );
@@ -335,6 +339,39 @@ export function FlowEditor({
       </ReactFlow>
     </section>
   );
+}
+
+function resetOutputPreviewForTarget(nodes: UiNode[], target: UiNode | undefined): UiNode[] {
+  if (!target || target.type !== 'codex-output') return nodes;
+  const data = target.data.workflowNode.data;
+  const hasGeneratedPreview =
+    Boolean(data.previewUrl) ||
+    (Array.isArray(data.previewUrls) && data.previewUrls.length > 0) ||
+    Boolean(data.generation) ||
+    Boolean(data.generating);
+  if (!hasGeneratedPreview) return nodes;
+
+  return nodes.map((node) => {
+    if (node.id !== target.id) return node;
+    const {
+      previewUrl: _previewUrl,
+      previewUrls: _previewUrls,
+      previewIndex: _previewIndex,
+      generation: _generation,
+      generating: _generating,
+      ...restData
+    } = node.data.workflowNode.data;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        workflowNode: {
+          ...node.data.workflowNode,
+          data: restData,
+        },
+      },
+    };
+  });
 }
 
 function styleConnection(connection: Connection, source: UiNode | undefined, target: UiNode | undefined): UiEdge {

@@ -1,6 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { existsSync } from 'node:fs';
-import { access, readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +20,18 @@ function logRequest(req: Request, res: Response, start: number): void {
 import { imagexPaths } from '../config/paths.js';
 import { getCodexAuthStatus, resolveCodexBearerToken } from '../auth/store.js';
 import { generateCodexImages } from '../providers/codexImage.js';
-import type { GenerateWorkflowRequest, GeneratedImage, ImageXEdge, ImageXNode, ImageXWorkflow, OutputNodeResult } from '../shared/types.js';
+import type {
+  GenerateWorkflowRequest,
+  GenerateWorkflowRunRequest,
+  GeneratedImage,
+  GenerationJobStatus,
+  GenerationRunMode,
+  ImageXEdge,
+  ImageXNode,
+  ImageXWorkflow,
+  OutputNodeGenerationState,
+  OutputNodeResult,
+} from '../shared/types.js';
 import { compileOutputNodeWorkflow, compileWorkflow } from '../workflows/compiler.js';
 import { listWorkflows, saveWorkflow } from '../workflows/store.js';
 import {
@@ -60,14 +72,248 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
   });
 
   // ─── Active generation job tracking ─────────────────────────────────────────
-  type ActiveJob = {
+  type DurableGenerationJob = {
+    id: string;
     projectId: string;
-    counts: Record<string, number>;
-    images: Record<string, (GeneratedImage | null)[]>;
-    status: 'running' | 'done' | 'error';
+    workflowId: string;
+    mode: GenerationRunMode;
+    requestedOutputNodeIds: string[];
+    plannedOutputNodeIds: string[];
+    status: 'running' | 'done' | 'error' | 'cancelled';
+    outputs: Record<string, OutputNodeGenerationState>;
+    results: OutputNodeResult[];
+    createdAt: string;
+    updatedAt: string;
     error?: string;
   };
+
+  type ActiveJob = {
+    job: DurableGenerationJob;
+    controller: AbortController;
+  };
+
   const activeJobs = new Map<string, ActiveJob>();
+
+  function generationJobsFile(projectId: string): string {
+    return join(projectOutputDir(projectId), 'runs', 'index.json');
+  }
+
+  function generationRunDir(projectId: string, jobId: string): string {
+    return join(projectOutputDir(projectId), 'runs', safePathSegment(jobId));
+  }
+
+  function generationRunJobFile(projectId: string, jobId: string): string {
+    return join(generationRunDir(projectId, jobId), 'job.json');
+  }
+
+  function generationOutputDir(projectId: string, jobId: string, outputNodeId: string): string {
+    return join(generationRunDir(projectId, jobId), safePathSegment(outputNodeId));
+  }
+
+  function generationOutputUrlBase(projectId: string, jobId: string, outputNodeId: string): string {
+    return `/api/projects/${encodeURIComponent(projectId)}/outputs/runs/${encodeURIComponent(safePathSegment(jobId))}/${encodeURIComponent(safePathSegment(outputNodeId))}`;
+  }
+
+  function safePathSegment(value: string): string {
+    return value.replace(/[^a-z0-9._-]+/gi, '_').slice(0, 120) || 'item';
+  }
+
+  async function readGenerationJobs(projectId: string): Promise<DurableGenerationJob[]> {
+    const raw = await readFile(generationJobsFile(projectId), 'utf8').catch(() => '[]');
+    const parsed = JSON.parse(raw) as DurableGenerationJob[];
+    return Array.isArray(parsed) ? parsed : [];
+  }
+
+  async function writeGenerationJobs(projectId: string, jobs: DurableGenerationJob[]): Promise<void> {
+    const file = generationJobsFile(projectId);
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, `${JSON.stringify(jobs.slice(-50), null, 2)}\n`, 'utf8');
+  }
+
+  async function saveGenerationJob(job: DurableGenerationJob): Promise<void> {
+    job.updatedAt = new Date().toISOString();
+    const runDir = generationRunDir(job.projectId, job.id);
+    await mkdir(runDir, { recursive: true });
+    await writeFile(generationRunJobFile(job.projectId, job.id), `${JSON.stringify(job, null, 2)}\n`, 'utf8');
+
+    const jobs = await readGenerationJobs(job.projectId);
+    const index = jobs.findIndex((candidate) => candidate.id === job.id);
+    if (index >= 0) jobs[index] = job;
+    else jobs.push(job);
+    await writeGenerationJobs(job.projectId, jobs);
+  }
+
+  function latestGenerationJob(jobs: DurableGenerationJob[]): DurableGenerationJob | null {
+    return [...jobs].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] || null;
+  }
+
+  function outputGenerationState(node: ImageXNode): OutputNodeGenerationState | null {
+    const value = node.data.generation;
+    if (!value || typeof value !== 'object') return null;
+    const state = value as OutputNodeGenerationState;
+    return Array.isArray(state.images) ? state : null;
+  }
+
+  function storedImagesForOutput(node: ImageXNode): GeneratedImage[] {
+    const generation = outputGenerationState(node);
+    if (generation?.images.length) return generation.images.filter((image) => existsSync(image.path));
+    const urls = Array.isArray(node.data.previewUrls) ? node.data.previewUrls : [];
+    return urls
+      .filter((url): url is string => typeof url === 'string' && url.length > 0)
+      .map((url, index) => ({
+        id: `${node.id}-stored-${index}`,
+        path: outputPathFromProjectUrl(String(url)),
+        url,
+      }))
+      .filter((image) => Boolean(image.path) && existsSync(image.path));
+  }
+
+  function outputPathFromProjectUrl(url: string): string {
+    const match = url.match(/^\/api\/projects\/([^/]+)\/outputs\/(.+?)(?:[?#].*)?$/);
+    if (!match) return '';
+    const projectId = decodeURIComponent(match[1] || '');
+    const relativePath = decodeURIComponent(match[2] || '');
+    const outputsRoot = resolve(projectOutputDir(projectId));
+    const target = resolve(outputsRoot, relativePath);
+    if (relative(outputsRoot, target).startsWith('..')) return '';
+    return target;
+  }
+
+  function expectedCountForOutput(node: ImageXNode): number {
+    return Math.max(1, Math.min(4, Math.trunc(Number(node.data?.count) || 1)));
+  }
+
+  function patchWorkflowOutputGeneration(
+    workflow: ImageXWorkflow,
+    outputNodeId: string,
+    generation: OutputNodeGenerationState,
+  ): ImageXWorkflow {
+    return {
+      ...workflow,
+      nodes: workflow.nodes.map((node) => {
+        if (node.id !== outputNodeId) return node;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            previewUrl: generation.images[0]?.url || '',
+            previewUrls: generation.images.map((image) => image.url),
+            previewIndex: 0,
+            generating: generation.status === 'queued' || generation.status === 'running',
+            generation,
+          },
+        };
+      }),
+    };
+  }
+
+  function updateJobOutput(
+    job: DurableGenerationJob,
+    workflow: ImageXWorkflow,
+    outputNodeId: string,
+    patch: Partial<OutputNodeGenerationState>,
+  ): ImageXWorkflow {
+    const previous = job.outputs[outputNodeId];
+    const now = new Date().toISOString();
+    const next: OutputNodeGenerationState = {
+      jobId: job.id,
+      status: previous?.status || 'queued',
+      images: previous?.images || [],
+      expectedCount: previous?.expectedCount || 1,
+      updatedAt: now,
+      ...patch,
+    };
+    job.outputs[outputNodeId] = next;
+    return patchWorkflowOutputGeneration(workflow, outputNodeId, next);
+  }
+
+  function outputDependencies(workflow: ImageXWorkflow): Map<string, Set<string>> {
+    const outputIds = new Set(workflow.nodes.filter((node) => node.type === 'codex-output').map((node) => node.id));
+    const dependencies = new Map<string, Set<string>>();
+
+    function trace(nodeId: string, visited: Set<string>): string[] {
+      if (visited.has(nodeId)) return [];
+      visited.add(nodeId);
+      const found: string[] = [];
+      for (const edge of workflow.edges) {
+        if (edge.target !== nodeId) continue;
+        if (outputIds.has(edge.source)) {
+          found.push(edge.source);
+        } else {
+          found.push(...trace(edge.source, visited));
+        }
+      }
+      return found;
+    }
+
+    for (const id of outputIds) {
+      dependencies.set(id, new Set(trace(id, new Set([id]))));
+    }
+    return dependencies;
+  }
+
+  function planOutputRun(
+    workflow: ImageXWorkflow,
+    requestedOutputNodeIds: string[] | undefined,
+    mode: GenerationRunMode,
+  ): { plannedOutputNodeIds: string[]; levels: string[][]; dependencies: Map<string, Set<string>> } {
+    const outputNodes = workflow.nodes.filter((node) => node.type === 'codex-output');
+    const outputIds = new Set(outputNodes.map((node) => node.id));
+    const nodesById = new Map(outputNodes.map((node) => [node.id, node]));
+    const dependencies = outputDependencies(workflow);
+    const requested = mode === 'all'
+      ? outputNodes.map((node) => node.id)
+      : (requestedOutputNodeIds || []).filter((id) => outputIds.has(id));
+    const planned = new Set<string>();
+
+    function includeWithDeps(id: string): void {
+      if (!outputIds.has(id) || planned.has(id)) return;
+      const deps = dependencies.get(id) || new Set<string>();
+      for (const depId of deps) {
+        const dep = nodesById.get(depId);
+        const hasStored = dep ? storedImagesForOutput(dep).length > 0 : false;
+        if (mode === 'selected' && hasStored && !requested.includes(depId)) continue;
+        includeWithDeps(depId);
+      }
+      planned.add(id);
+    }
+
+    for (const id of requested) includeWithDeps(id);
+
+    const plannedDependencies = new Map<string, Set<string>>();
+    for (const id of planned) {
+      plannedDependencies.set(id, new Set([...dependencies.get(id) || []].filter((depId) => planned.has(depId))));
+    }
+
+    const remaining = new Set(planned);
+    const levels: string[][] = [];
+    while (remaining.size > 0) {
+      const ready = [...remaining].filter((id) => {
+        const deps = plannedDependencies.get(id) || new Set<string>();
+        return [...deps].every((depId) => !remaining.has(depId));
+      });
+      if (ready.length === 0) throw new Error('Circular dependency detected between output nodes');
+      levels.push(ready);
+      for (const id of ready) remaining.delete(id);
+    }
+
+    return { plannedOutputNodeIds: [...planned], levels, dependencies };
+  }
+
+  function jobStatusPayload(job: DurableGenerationJob, active: boolean): GenerationJobStatus {
+    const payload: GenerationJobStatus = {
+      active,
+      jobId: job.id,
+      status: job.status,
+      mode: job.mode,
+      requestedOutputNodeIds: job.requestedOutputNodeIds,
+      plannedOutputNodeIds: job.plannedOutputNodeIds,
+      outputs: job.outputs,
+      results: job.results,
+    };
+    if (job.error) payload.error = job.error;
+    return payload;
+  }
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, name: 'imagex' });
@@ -236,63 +482,96 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     }
   });
 
-  app.post('/api/projects/:projectId/generate', async (req: Request<{ projectId: string }, unknown, GenerateWorkflowRequest>, res, next) => {
+  app.post('/api/projects/:projectId/generate', async (req: Request<{ projectId: string }, unknown, GenerateWorkflowRunRequest>, res, next) => {
     try {
       const projectId = req.params.projectId;
-      const outputNodes = req.body.workflow.nodes.filter((n) => n.type === 'codex-output');
-      log('generate', 'starting workflow generation (SSE)', { projectId, outputNodes: outputNodes.length });
-      const bearerToken = await resolveCodexBearerToken();
+      if (activeJobs.get(projectId)?.job.status === 'running') {
+        res.status(409).json({ error: 'A generation job is already running for this project.' });
+        return;
+      }
 
-      // SSE headers
+      let workflow = req.body.workflow;
+      const mode = req.body.mode || 'selected';
+      const requestedOutputNodeIds = req.body.outputNodeIds || [];
+      const plan = planOutputRun(workflow, requestedOutputNodeIds, mode);
+      if (plan.plannedOutputNodeIds.length === 0) {
+        res.status(400).json({ error: 'Select at least one output node to run.' });
+        return;
+      }
+
+      log('generate', 'starting workflow generation (SSE)', { projectId, mode, planned: plan.plannedOutputNodeIds });
+      const bearerToken = await resolveCodexBearerToken();
+      const controller = new AbortController();
+      const now = new Date().toISOString();
+      const job: DurableGenerationJob = {
+        id: `gen-${randomUUID().slice(0, 12)}`,
+        projectId,
+        workflowId: workflow.id,
+        mode,
+        requestedOutputNodeIds,
+        plannedOutputNodeIds: plan.plannedOutputNodeIds,
+        status: 'running',
+        outputs: {},
+        results: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      for (const outputNodeId of plan.plannedOutputNodeIds) {
+        const node = workflow.nodes.find((candidate) => candidate.id === outputNodeId);
+        if (!node) continue;
+        workflow = updateJobOutput(job, workflow, outputNodeId, {
+          status: 'queued',
+          images: [],
+          expectedCount: expectedCountForOutput(node),
+        });
+      }
+      await saveGenerationJob(job);
+      await saveProjectWorkflow(projectId, workflow);
+      activeJobs.set(projectId, { job, controller });
+
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders();
 
-      const workflow = req.body.workflow;
-      const outputNodesList = workflow.nodes.filter((n: any) => n.type === 'codex-output');
-
-      // Build counts and init job tracking
-      const counts: Record<string, number> = {};
-      const jobImages: Record<string, (GeneratedImage | null)[]> = {};
-      for (const n of outputNodesList) {
-        const count = Math.max(1, Math.min(4, Math.trunc(Number(n.data?.count) || 1)));
-        counts[n.id] = count;
-        jobImages[n.id] = Array.from({ length: count }, () => null);
-      }
-
-      const job: ActiveJob = { projectId, counts, images: jobImages, status: 'running' };
-      activeJobs.set(projectId, job);
-
-      res.write(`data: ${JSON.stringify({ type: 'start', counts })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'start', job: jobStatusPayload(job, true) })}\n\n`);
 
       const results = await executeWorkflowOutputNodes(
         workflow,
         bearerToken,
         projectId,
-        (outputNodeId, image, index) => {
-          // Track in job state
-          if (job.images[outputNodeId] && index < job.images[outputNodeId].length) {
-            job.images[outputNodeId][index] = image;
-          }
-          // Stream each image as it arrives
-          res.write(`data: ${JSON.stringify({ type: 'image', outputNodeId, image, index })}\n\n`);
-        }
+        plan.levels,
+        plan.dependencies,
+        job,
+        async (nextWorkflow, outputNodeId, image, index) => {
+          workflow = nextWorkflow;
+          await saveGenerationJob(job);
+          await saveProjectWorkflow(projectId, workflow);
+          res.write(`data: ${JSON.stringify({ type: 'image', outputNodeId, image, index, job: jobStatusPayload(job, true) })}\n\n`);
+        },
+        controller.signal
       );
 
       job.status = 'done';
+      job.results = results;
       log('generate', 'workflow generation complete', { projectId, results: results.length });
+      await saveGenerationJob(job);
       await saveProjectWorkflow(projectId, workflow);
 
-      res.write(`data: ${JSON.stringify({ type: 'done', results })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'done', results, job: jobStatusPayload(job, false) })}\n\n`);
       res.end();
-
-      // Clean up job after a short delay (allow client reconnect)
-      setTimeout(() => { if (activeJobs.get(projectId) === job) activeJobs.delete(projectId); }, 30000);
+      activeJobs.delete(projectId);
     } catch (error) {
       const projectId = req.params.projectId;
-      const job = activeJobs.get(projectId);
-      if (job) { job.status = 'error'; job.error = String(error); }
+      const active = activeJobs.get(projectId);
+      if (active) {
+        active.job.status = active.controller.signal.aborted ? 'cancelled' : 'error';
+        if (active.controller.signal.aborted) delete active.job.error;
+        else active.job.error = String(error);
+        await saveGenerationJob(active.job).catch(() => undefined);
+        activeJobs.delete(projectId);
+      }
       log('generate', 'workflow generation failed', { projectId, error: String(error) });
       if (res.headersSent) {
         res.write(`data: ${JSON.stringify({ type: 'error', error: String(error) })}\n\n`);
@@ -303,20 +582,76 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     }
   });
 
-  // Status endpoint for reconnecting after page refresh
-  app.get('/api/projects/:projectId/generate-status', (req, res) => {
-    const job = activeJobs.get(req.params.projectId);
-    if (!job) {
-      res.json({ active: false });
-      return;
+  app.post('/api/projects/:projectId/generate/cancel', async (req, res, next) => {
+    try {
+      const active = activeJobs.get(req.params.projectId);
+      if (!active) {
+        res.json({ active: false });
+        return;
+      }
+      active.controller.abort();
+      active.job.status = 'cancelled';
+      let project = await getProject(req.params.projectId);
+      let workflow = project.workflow;
+      for (const [outputNodeId, state] of Object.entries(active.job.outputs)) {
+        if (state.status === 'queued' || state.status === 'running') {
+          const nextState: OutputNodeGenerationState = {
+            ...state,
+            status: state.images.length > 0 ? 'partial' : 'cancelled',
+            error: state.images.length > 0 ? 'Cancelled after partial output.' : 'Cancelled.',
+            updatedAt: new Date().toISOString(),
+          };
+          active.job.outputs[outputNodeId] = nextState;
+          workflow = patchWorkflowOutputGeneration(workflow, outputNodeId, nextState);
+        }
+      }
+      await saveGenerationJob(active.job);
+      await saveProjectWorkflow(req.params.projectId, workflow);
+      res.json(jobStatusPayload(active.job, false));
+    } catch (error) {
+      next(error);
     }
-    res.json({
-      active: job.status === 'running',
-      status: job.status,
-      counts: job.counts,
-      images: job.images,
-      error: job.error,
-    });
+  });
+
+  // Status endpoint for reconnecting after page refresh
+  app.get('/api/projects/:projectId/generate-status', async (req, res, next) => {
+    try {
+      const projectId = req.params.projectId;
+      const active = activeJobs.get(projectId);
+      if (active) {
+        res.json(jobStatusPayload(active.job, active.job.status === 'running'));
+        return;
+      }
+
+      const latest = latestGenerationJob(await readGenerationJobs(projectId));
+      if (!latest) {
+        res.json({ active: false });
+        return;
+      }
+
+      if (latest.status === 'running') {
+        latest.status = 'error';
+        latest.error = 'The daemon stopped before this generation completed.';
+        let project = await getProject(projectId);
+        let workflow = project.workflow;
+        for (const [outputNodeId, state] of Object.entries(latest.outputs)) {
+          const failedState: OutputNodeGenerationState = {
+            ...state,
+            status: state.images.length > 0 ? 'partial' : 'error',
+            error: state.images.length > 0 ? 'Daemon stopped after partial output.' : 'Daemon stopped before output was generated.',
+            updatedAt: new Date().toISOString(),
+          };
+          latest.outputs[outputNodeId] = failedState;
+          workflow = patchWorkflowOutputGeneration(workflow, outputNodeId, failedState);
+        }
+        await saveGenerationJob(latest);
+        await saveProjectWorkflow(projectId, workflow);
+      }
+
+      res.json(jobStatusPayload(latest, false));
+    } catch (error) {
+      next(error);
+    }
   });
 
   async function resolveImageReferences(
@@ -521,6 +856,10 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
         }
       }
 
+      if (node.type === 'codex-output' && refName === `__output:${node.id}`) {
+        return true;
+      }
+
       for (const edge of workflow.edges) {
         if (edge.target !== nodeId) continue;
         const found = traceBack(edge.source, visited);
@@ -611,10 +950,12 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     }
   });
 
-  app.get('/api/projects/:projectId/outputs/:file', async (req, res, next) => {
+  app.get(/^\/api\/projects\/([^/]+)\/outputs\/(.+)$/, async (req, res, next) => {
+    let projectId = '';
+    let file = '';
     try {
-      const projectId = decodeURIComponent(req.params.projectId || '');
-      const file = decodeURIComponent(req.params.file || '');
+      projectId = decodeURIComponent(String(req.params[0] || ''));
+      file = decodeURIComponent(String(req.params[1] || ''));
       const outputsRoot = resolve(projectOutputDir(projectId));
       const target = resolve(outputsRoot, file);
       log('outputs', 'serving file', { projectId, file, target, outputsRoot });
@@ -627,7 +968,7 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
       const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
       res.type(mimeType).send(buffer);
     } catch (error) {
-      log('outputs', 'failed to serve file', { projectId: req.params.projectId, file: req.params.file, error: String(error) });
+      log('outputs', 'failed to serve file', { projectId, file, error: String(error) });
       next(error);
     }
   });
@@ -658,7 +999,11 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     workflow: ImageXWorkflow,
     bearerToken: string,
     projectId?: string,
-    onImage?: (outputNodeId: string, image: GeneratedImage, index: number) => void
+    plannedLevels?: string[][],
+    dependenciesOverride?: Map<string, Set<string>>,
+    job?: DurableGenerationJob,
+    onImage?: (workflow: ImageXWorkflow, outputNodeId: string, image: GeneratedImage, index: number) => Promise<void> | void,
+    signal?: AbortSignal
   ): Promise<OutputNodeResult[]> {
     const outputNodes = workflow.nodes.filter((n) => n.type === 'codex-output');
     if (outputNodes.length === 0) {
@@ -668,75 +1013,35 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
 
     log('executor', 'discovered output nodes', { count: outputNodes.length, ids: outputNodes.map((n) => n.id) });
 
-    // Build dependency graph: targetOutputId -> Set of source output node ids
-    // Trace through intermediate nodes (an output node may connect through image nodes)
-    const dependencies = new Map<string, Set<string>>();
-    const outputNodeIds = new Set(outputNodes.map((n) => n.id));
-
-    function findUpstreamOutputNodes(nodeId: string, visited: Set<string>): string[] {
-      if (visited.has(nodeId)) return [];
-      visited.add(nodeId);
-      const found: string[] = [];
-      for (const edge of workflow.edges) {
-        if (edge.target !== nodeId) continue;
-        const sourceId = edge.source;
-        if (outputNodeIds.has(sourceId)) {
-          found.push(sourceId);
-        } else {
-          // Trace through intermediate nodes
-          found.push(...findUpstreamOutputNodes(sourceId, visited));
-        }
-      }
-      return found;
-    }
-
-    for (const outputNode of outputNodes) {
-      const upstreamOutputs = findUpstreamOutputNodes(outputNode.id, new Set([outputNode.id]));
-      if (upstreamOutputs.length > 0) {
-        dependencies.set(outputNode.id, new Set(upstreamOutputs));
-      }
-    }
-
-    // Kahn's algorithm for topological sort
-    const inDegree = new Map<string, number>();
-    for (const node of outputNodes) {
-      inDegree.set(node.id, dependencies.get(node.id)?.size || 0);
-    }
-
-    const queue = outputNodes.filter((n) => inDegree.get(n.id) === 0).map((n) => n.id);
-    const order: string[] = [];
-
-    while (queue.length > 0) {
-      const id = queue.shift()!;
-      order.push(id);
-
-      for (const [targetId, deps] of dependencies) {
-        if (deps.has(id)) {
-          const newDegree = (inDegree.get(targetId) || 0) - 1;
-          inDegree.set(targetId, newDegree);
-          if (newDegree === 0) queue.push(targetId);
-        }
-      }
-    }
-
-    if (order.length !== outputNodes.length) {
-      throw new Error('Circular dependency detected between output nodes');
-    }
-
-    log('executor', 'execution order', { order });
+    const dependencies = dependenciesOverride || outputDependencies(workflow);
+    const levels = plannedLevels || planOutputRun(workflow, outputNodes.map((node) => node.id), 'all').levels;
+    log('executor', 'execution levels', { levels });
 
     const results = new Map<string, GeneratedImage[]>();
+    for (const node of outputNodes) {
+      const stored = storedImagesForOutput(node);
+      if (stored.length > 0) results.set(node.id, stored);
+    }
     const outputResults: OutputNodeResult[] = [];
 
-    for (const outputNodeId of order) {
+    async function runOutputNode(outputNodeId: string): Promise<OutputNodeResult | null> {
+      if (signal?.aborted) throw new Error('Generation cancelled');
       log('executor', 'compiling output node', { outputNodeId });
       const compiled = compileOutputNodeWorkflow(workflow, outputNodeId);
       if (!compiled) {
         log('executor', 'compilation returned null, skipping', { outputNodeId });
-        continue;
+        return null;
       }
 
       const { prompt, options } = compiled;
+      const outputNode = workflow.nodes.find((node) => node.id === outputNodeId);
+      if (job && outputNode) {
+        workflow = updateJobOutput(job, workflow, outputNodeId, {
+          status: 'running',
+          prompt,
+          expectedCount: expectedCountForOutput(outputNode),
+        });
+      }
       log('executor', 'compiled output node', { outputNodeId, refs: options.references?.length || 0 });
 
       // Resolve static image references (assets) and output node references
@@ -749,39 +1054,77 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
         log('executor', 'resolved image references', { outputNodeId, resolved: resolved.length });
       }
 
-      // Gather upstream generated images from dependent output nodes as extra images
-      const extraImages: Array<{ dataUrl: string }> = [];
-      for (const upstreamId of upstreamIds) {
-        const upstreamImages = results.get(upstreamId) || [];
-        log('executor', 'attaching upstream images', { outputNodeId, upstreamId, count: upstreamImages.length });
-        for (const img of upstreamImages) {
-          log('executor', 'reading upstream image', { outputNodeId, upstreamId, path: img.path });
-          const file = await readFile(img.path);
-          const ext = extname(img.path).slice(1) || 'png';
-          const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
-          extraImages.push({
-            dataUrl: `data:${mimeType};base64,${file.toString('base64')}`,
-          });
-        }
-      }
-
-      log('executor', 'generating images', { outputNodeId, count: options.count, extraImages: extraImages.length });
+      log('executor', 'generating images', { outputNodeId, count: options.count, upstreamOutputs: upstreamIds.size });
       const images = await generateCodexImages(
         options,
         bearerToken,
         projectId
           ? {
-              outputDir: projectOutputDir(projectId),
-              urlBase: `/api/projects/${encodeURIComponent(projectId)}/outputs`,
+              outputDir: job
+                ? generationOutputDir(projectId, job.id, outputNodeId)
+                : projectOutputDir(projectId),
+              urlBase: job
+                ? generationOutputUrlBase(projectId, job.id, outputNodeId)
+                : `/api/projects/${encodeURIComponent(projectId)}/outputs`,
             }
           : undefined,
-        extraImages,
-        onImage ? (image, index) => onImage(outputNodeId, image, index) : undefined
+        [],
+        async (image, index) => {
+          if (job) {
+            const previous = job.outputs[outputNodeId];
+            const nextImages = [...(previous?.images || [])];
+            nextImages[index] = image;
+            workflow = updateJobOutput(job, workflow, outputNodeId, {
+              status: 'running',
+              images: nextImages.filter(Boolean),
+              prompt,
+              expectedCount: options.count,
+            });
+          }
+          await onImage?.(workflow, outputNodeId, image, index);
+        },
+        signal
       );
       log('executor', 'images generated', { outputNodeId, count: images.length, urls: images.map((i) => i.url) });
 
       results.set(outputNodeId, images);
-      outputResults.push({ outputNodeId, prompt, images });
+      if (job) {
+        const donePatch: Partial<OutputNodeGenerationState> = {
+          status: images.length >= options.count ? 'done' : 'partial',
+          images,
+          prompt,
+          expectedCount: options.count,
+        };
+        if (images.length < options.count) donePatch.error = 'Generation returned fewer images than requested.';
+        workflow = updateJobOutput(job, workflow, outputNodeId, {
+          ...donePatch,
+        });
+      }
+      return { outputNodeId, prompt, images, status: images.length >= options.count ? 'done' : 'partial' };
+    }
+
+    for (const level of levels) {
+      if (signal?.aborted) throw new Error('Generation cancelled');
+      const settled = await Promise.allSettled(level.map((outputNodeId) => runOutputNode(outputNodeId)));
+      const errors: string[] = [];
+      for (let index = 0; index < settled.length; index += 1) {
+        const outcome = settled[index]!;
+        const outputNodeId = level[index]!;
+        if (outcome.status === 'fulfilled') {
+          if (outcome.value) outputResults.push(outcome.value);
+          continue;
+        }
+        const message = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+        errors.push(message);
+        if (job) {
+          const previous = job.outputs[outputNodeId];
+          workflow = updateJobOutput(job, workflow, outputNodeId, {
+            status: previous?.images.length ? 'partial' : signal?.aborted ? 'cancelled' : 'error',
+            error: signal?.aborted ? 'Cancelled.' : message,
+          });
+        }
+      }
+      if (errors.length > 0) throw new Error(errors[0]);
     }
 
     return outputResults;
