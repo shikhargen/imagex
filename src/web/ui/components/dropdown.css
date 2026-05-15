@@ -3,7 +3,8 @@
  * Used by: select dropdowns, context menus, sidebar menus, submenus.
  */
 
-.ix-dropdown {
+.ix-dropdown,
+.menu-shell {
   border: 1px solid var(--ui-border-default);
   border-radius: var(--ui-radius-lg);
   background: var(--ui-bg-surface);
@@ -12,13 +13,15 @@
   overflow: hidden;
 }
 
-.ix-dropdown-list {
+.ix-dropdown-list,
+.menu-list {
   display: flex;
   flex-direction: column;
   padding: 0.25rem;
 }
 
-.ix-dropdown-item {
+.ix-dropdown-item,
+.menu-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -36,25 +39,37 @@
 
 .ix-dropdown-item:hover,
 .ix-dropdown-item.active,
-.ix-dropdown-item[data-highlighted] {
+.ix-dropdown-item[data-highlighted],
+.menu-item:hover,
+.menu-item.active {
   background: var(--ui-bg-hover);
   color: var(--ui-text-primary);
 }
 
 .ix-dropdown-item[data-state='checked'],
-.ix-dropdown-item.selected {
+.ix-dropdown-item.selected,
+.menu-item.selected {
   color: var(--ui-accent-text);
 }
 
-.ix-dropdown-item.danger {
+.ix-dropdown-item.danger,
+.menu-item.danger {
   color: var(--ui-color-danger);
 }
 
-.ix-dropdown-item.danger:hover {
+.ix-dropdown-item.danger:hover,
+.menu-item.danger:hover {
   background: var(--ui-color-danger-bg);
 }
 
-.ix-dropdown-separator {
+.ix-dropdown-item:disabled,
+.menu-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ix-dropdown-separator,
+.menu-separator {
   height: 1px;
   background: var(--ui-border-subtle);
   margin: 0.25rem 0;

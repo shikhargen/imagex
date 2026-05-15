@@ -20,7 +20,7 @@
 
 .dashboard-header h1 {
   margin: 1.778rem 0 0.444rem;
-  font-size: 1.889rem;
+  font-size: 2.450rem;
   line-height: 1;
 }
 
@@ -190,84 +190,6 @@
   background: var(--ui-color-danger);
   color: var(--ui-bg-base);
   border-color: var(--ui-color-danger);
-}
-
-.node-popup-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 220;
-  display: grid;
-  place-items: start center;
-  padding-top: 4.667rem;
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(2px);
-  animation: backdrop-fade 0.15s ease-out;
-}
-
-.node-popup {
-  width: min(25.556rem, calc(100vw - 2.222rem));
-  border: 1px solid var(--ui-border-subtle);
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-surface);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
-  animation: modal-enter 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.node-popup header {
-  display: grid;
-  grid-template-columns: 1rem minmax(0, 1fr) 1.444rem;
-  align-items: center;
-  gap: var(--ui-space-3);
-  min-height: 2.333rem;
-  border-bottom: 1px solid var(--ui-border-subtle);
-  padding: 0 var(--ui-space-5);
-  color: var(--ui-text-dim);
-}
-
-.node-popup header button {
-  display: grid;
-  place-items: center;
-  border: 0;
-  color: var(--ui-text-dim);
-  background: transparent;
-  transition: color 0.15s;
-}
-
-.node-popup header button:hover {
-  color: var(--ui-text-primary);
-}
-
-.node-popup-list {
-  display: grid;
-  max-height: 20rem;
-  overflow: auto;
-  padding: var(--ui-space-2);
-}
-
-.node-choice {
-  display: grid;
-  grid-template-columns: 1.444rem minmax(0, 1fr);
-  gap: var(--ui-space-3);
-  align-items: center;
-  min-height: 2.556rem;
-  padding: var(--ui-space-2) var(--ui-space-3);
-  border-radius: calc(var(--ui-radius-lg) - 4px);
-  text-align: left;
-  white-space: normal;
-  transition: background 0.15s;
-}
-
-.node-choice:hover {
-  background: var(--ui-bg-hover);
-}
-
-.node-popup-list span {
-  display: grid;
-  gap: 1px;
-}
-
-.node-popup-list small {
-  color: var(--ui-text-dim);
 }
 
 .settings-modal {
@@ -535,47 +457,15 @@
 .node-menu {
   position: fixed;
   z-index: 100;
-  display: grid;
-  min-width: 9rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 10rem;
   border: 1px solid var(--ui-border-default);
   border-radius: var(--ui-radius-lg);
   padding: 0.25rem;
   background: var(--ui-bg-surface);
   box-shadow: var(--ui-shadow-lg);
   animation: ix-dropdown-enter 0.1s ease;
-}
-
-.node-menu button {
-  width: 100%;
-  justify-content: flex-start;
-  border: 0;
-  border-radius: calc(var(--ui-radius-lg) - 4px);
-  padding: 0.375rem 0.625rem;
-  color: var(--ui-text-secondary);
-  background: transparent;
-  text-align: left;
-  font-size: var(--ui-text-sm);
-  cursor: pointer;
-  transition: background 0.08s ease, color 0.08s ease;
-}
-
-.node-menu button:hover {
-  background: var(--ui-bg-hover);
-  color: var(--ui-text-primary);
-}
-
-.node-menu .danger {
-  color: var(--ui-color-danger);
-}
-
-.node-menu .danger:hover {
-  background: var(--ui-color-danger-bg);
-}
-
-.node-menu-separator {
-  height: 1px;
-  background: var(--ui-border-subtle);
-  margin: 0.25rem 0;
 }
 
 .menu-backdrop {

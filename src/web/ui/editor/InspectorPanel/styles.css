@@ -83,42 +83,6 @@
   font-size: var(--ui-text-xs);
 }
 
-.inspector-fields {
-  display: grid;
-  gap: var(--ui-space-5);
-  padding: var(--ui-space-6);
-}
-
-.inspector-title {
-  display: grid;
-  gap: var(--ui-space-1);
-  border: 1px solid
-    color-mix(in srgb, var(--node-accent) 20%, var(--ui-border-subtle));
-  border-radius: var(--ui-radius-lg);
-  padding: var(--ui-space-4);
-  background: rgba(255, 255, 255, 0.02);
-  transition: border-color 0.2s;
-}
-
-.inspector-title:hover {
-  border-color: color-mix(in srgb, var(--node-accent) 40%, var(--ui-border-default));
-}
-
-.inspector-title span {
-  color: var(--node-accent);
-  font-size: 0.583rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-weight: 600;
-  opacity: 0.85;
-}
-
-.inspector-title strong {
-  color: var(--ui-text-primary);
-  font-size: var(--ui-text-sm);
-  font-weight: 500;
-}
-
 .inspector .ix-field {
   grid-template-columns: 1fr;
 }
@@ -171,38 +135,4 @@
   background: var(--ui-bg-overlay);
 }
 
-/* Connected field - shows label with disconnect button */
-.inspector-connected-field {
-  display: flex;
-  align-items: center;
-  gap: var(--ui-space-3);
-  padding: var(--ui-space-3) var(--ui-space-4);
-  border: 1px solid var(--ui-border-subtle);
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-panel);
-}
 
-.inspector-disconnect-btn {
-  display: grid;
-  place-items: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--ui-text-dim);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
-}
-
-.inspector-disconnect-btn:hover {
-  background: var(--ui-color-danger-bg);
-  color: var(--ui-color-danger);
-}
-
-.inspector-connected-label {
-  color: var(--ui-text-muted);
-  font-size: var(--ui-text-sm);
-  font-weight: 500;
-}

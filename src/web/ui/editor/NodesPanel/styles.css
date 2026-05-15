@@ -14,7 +14,7 @@
 .node-panel-group-label {
   padding: var(--ui-space-1) var(--ui-space-3);
   color: var(--ui-text-dim);
-  font-size: 0.583rem;
+  font-size: var(--ui-text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;

@@ -599,6 +599,9 @@ function ResizeHandle({
   );
 }
 
+type MenuAction = { action: string; label: string; danger?: boolean };
+type MenuGroup = { items: MenuAction[] };
+
 function FloatingContextMenu({
   menu,
   isFrame,
@@ -612,34 +615,59 @@ function FloatingContextMenu({
   onClose: () => void;
   onAction: (action: string, menu: Exclude<FloatingMenu, null>) => void;
 }) {
-  const actions: Array<[string, string]> =
+  const groups: MenuGroup[] =
     menu.type === 'pane'
-      ? nodeChoices.map(({ type, label }) => [`add:${type}`, `Add ${label}`] as [string, string])
-
+      ? [
+          {
+            items: [
+              { action: 'add:prompt', label: 'Add Prompt' },
+              { action: 'add:image', label: 'Add Image' },
+              { action: 'add:color', label: 'Add Color' },
+              { action: 'add:file', label: 'Add File' },
+            ],
+          },
+          { items: [{ action: 'add:codex-output', label: 'Add Output' }] },
+          {
+            items: [
+              { action: 'add:color-balance', label: 'Add Color Balance' },
+              { action: 'add:rotate-flip', label: 'Add Rotate/Flip' },
+            ],
+          },
+          { items: [{ action: 'add:frame', label: 'Add Frame' }] },
+        ]
       : menu.type === 'workflow'
         ? [
-            ['rename', 'Rename'],
-            ['delete', 'Delete'],
+            { items: [{ action: 'rename', label: 'Rename' }] },
+            { items: [{ action: 'delete', label: 'Delete', danger: true }] },
           ]
         : menu.type === 'asset'
           ? [
-              ['rename', 'Rename'],
-              ['delete', 'Delete'],
+              { items: [{ action: 'rename', label: 'Rename' }] },
+              { items: [{ action: 'delete', label: 'Delete', danger: true }] },
             ]
-        : menu.type === 'project'
-          ? [
-              ['open', 'Open'],
-              ['rename', 'Rename'],
-              ['delete', 'Delete'],
-            ]
-          : [
-              ['duplicate', 'Duplicate'],
-              ...(isFrame ? [] : ([['create-asset', 'Create asset']] as Array<[string, string]>)),
-              ...(canDetach ? ([['detach-frame', 'Detach from frame']] as Array<[string, string]>) : []),
-              ['disconnect', 'Disconnect all edges'],
-              ...(isFrame ? ([['remove-frame', 'Remove frame only']] as Array<[string, string]>) : []),
-              ['delete', 'Delete'],
-            ];
+          : menu.type === 'project'
+            ? [
+                { items: [{ action: 'open', label: 'Open' }] },
+                { items: [{ action: 'rename', label: 'Rename' }] },
+                { items: [{ action: 'delete', label: 'Delete', danger: true }] },
+              ]
+            : [
+                {
+                  items: [
+                    { action: 'duplicate', label: 'Duplicate' },
+                    ...(isFrame ? [] : [{ action: 'create-asset', label: 'Create asset' } as MenuAction]),
+                    ...(canDetach ? [{ action: 'detach-frame', label: 'Detach from frame' } as MenuAction] : []),
+                  ],
+                },
+                {
+                  items: [
+                    { action: 'disconnect', label: 'Disconnect all edges' },
+                    ...(isFrame ? [{ action: 'remove-frame', label: 'Remove frame only' } as MenuAction] : []),
+                  ],
+                },
+                { items: [{ action: 'delete', label: 'Delete', danger: true }] },
+              ];
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -662,19 +690,23 @@ function FloatingContextMenu({
         }}
       />
       <div className="node-menu" style={{ left: menu.x, top: menu.y }}>
-        {actions.map(([action, label], index) => (
-          <Fragment key={action}>
-            {action === 'delete' && index > 0 && <div className="node-menu-separator" />}
-            <Button
-              variant="ghost"
-              size="sm"
-              className={action === 'delete' ? 'danger justify-start' : 'justify-start'}
-              onClick={() => onAction(action, menu)}
-            >
-              {label}
-            </Button>
-          </Fragment>
-        ))}
+        <div className="menu-list">
+          {groups.map((group, gIndex) => (
+            <Fragment key={gIndex}>
+              {gIndex > 0 && <div className="menu-separator" />}
+              {group.items.map((item) => (
+                <button
+                  key={item.action}
+                  type="button"
+                  className={`menu-item ${item.danger ? 'danger' : ''}`}
+                  onClick={() => onAction(item.action, menu)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </Fragment>
+          ))}
+        </div>
       </div>
     </>
   );

@@ -53,11 +53,11 @@
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
 
-  --ui-text-xs: 0.625rem;
-  --ui-text-sm: 0.75rem;
-  --ui-text-base: 0.875rem;
-  --ui-text-lg: 1rem;
-  --ui-text-xl: 1.25rem;
+  --ui-text-xs: 0.825rem;
+  --ui-text-sm: 0.975rem;
+  --ui-text-base: 1.150rem;
+  --ui-text-lg: 1.300rem;
+  --ui-text-xl: 1.625rem;
 
   /* ─── Spacing (8px grid) ────────────────────────────────────────────────── */
   --ui-space-1: 0.25rem;
@@ -210,7 +210,7 @@ button {
   background: transparent;
   color: var(--ui-text-secondary);
   border: 1px solid var(--ui-border-strong);
-  font-size: 0.6875rem;
+  font-size: var(--ui-text-xs);
   font-weight: 600;
   letter-spacing: 0.02em;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
@@ -309,21 +309,9 @@ button {
   align-items: center;
   gap: 0.556rem;
   padding: 0.222rem 0.444rem;
-  font-size: 1.222rem;
+  font-size: 1.600rem;
   font-weight: 800;
   letter-spacing: 0;
-}
-
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 1.556rem;
-  height: 1.556rem;
-  border-radius: 10px;
-  color: white;
-  background: var(--ui-text-dim);
-  font-size: 0.889rem;
-  line-height: 1;
 }
 
 .workspace {
@@ -339,8 +327,6 @@ button {
 /* ------------------------------------------------------------------ */
 /*  Top bar                                                           */
 /* ------------------------------------------------------------------ */
-/*  Top bar                                                           */
-/* ------------------------------------------------------------------ */
 
 kbd {
   border: 1px solid var(--ui-border-default);
@@ -349,31 +335,8 @@ kbd {
   background: rgba(30, 41, 59, 0.9);
   color: var(--ui-text-dim);
   width: fit-content;
-  font-size: 0.8rem;
+  font-size: var(--ui-text-sm);
 }
-
-.auth-pill,
-.connection-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.389rem;
-  height: 1.889rem;
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  color: #fbbf24;
-  border-radius: 999px;
-  padding: 0 var(--ui-space-4);
-  background: rgba(120, 53, 15, 0.18);
-  font-size: var(--ui-text-xs);
-  white-space: nowrap;
-}
-
-.connection-pill,
-.auth-pill.ok {
-  border-color: var(--ui-border-default);
-  color: #b9e3bd;
-  background: #242b24;
-}
-
 
 .muted {
   margin: var(--ui-space-7);
@@ -388,11 +351,6 @@ kbd {
 @media (max-width: 1180px) {
   .app-shell {
     grid-template-columns: 11.667rem 0.278rem minmax(0, 1fr);
-  }
-
-  .app-shell.left-collapsed,
-  .app-shell.left-collapsed.right-collapsed {
-    grid-template-columns: 3.556rem minmax(0, 1fr);
   }
 
   .inspector {

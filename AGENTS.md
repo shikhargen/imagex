@@ -75,7 +75,10 @@ Gitignored local notes may exist. Treat them as private context only; do not quo
 
 - Keep the app as a dense, dark, keyboard-first workflow editor, not a marketing page.
 - Use existing design tokens in `src/web/styles.css` and component styling in the nearby CSS module for the feature being changed.
-- Current visual language: near-black surfaces, warm amber primary action, per-node accent colors, Geist sans, JetBrains Mono for code/data, lucide icons.
+- Current visual language: near-black surfaces, warm amber accent, per-node accent colors, Geist sans, JetBrains Mono for code/data, lucide icons.
+- **Buttons**: primary/default buttons use an **outline** style (transparent bg, subtle border, amber on hover) — not filled. See `.ix-primary-action-btn` and `[data-slot='button'][data-variant='default']` in `styles.css`.
+- **Menus/dropdowns**: all use shared canonical classes from `src/web/ui/components/dropdown.css` — `.menu-shell`/`.ix-dropdown` for the container, `.menu-list`/`.ix-dropdown-list` for the wrapper, `.menu-item`/`.ix-dropdown-item` for rows, `.menu-separator`/`.ix-dropdown-separator` for dividers. Keep this consistent when adding new menus.
+- **Typography**: font sizes are defined as CSS variables in `styles.css` (`--ui-text-xs` through `--ui-text-xl`). Use these variables instead of hardcoded rem values.
 - Use shadcn components already present under `src/web/components/ui` before inventing custom primitives. Use the shadcn `Select`, not native `<select>`, for app UI.
 - Use icons for tool actions where a familiar icon exists. Avoid emoji unless explicitly requested.
 - Keep node dimensions stable. If adding fields, controls, labels, previews, or loading states, check that they do not resize nodes unpredictably or make text overflow.

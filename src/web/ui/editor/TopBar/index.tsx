@@ -122,38 +122,43 @@ export function TopBar({
               onMouseEnter={cancelClose}
               onMouseLeave={scheduleClose}
             >
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!canRunSelected}
-                onClick={() => {
-                  setMenuOpen(false);
-                  onRun('selected');
-                }}
-              >
-                Run selected
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!canRunSelected}
-                onClick={() => {
-                  setMenuOpen(false);
-                  onRun('forced');
-                }}
-              >
-                Run forced
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onRun('all');
-                }}
-              >
-                Run all
-              </button>
+              <div className="menu-list">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  disabled={!canRunSelected}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onRun('selected');
+                  }}
+                >
+                  Run selected
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  disabled={!canRunSelected}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onRun('forced');
+                  }}
+                >
+                  Run forced
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onRun('all');
+                  }}
+                >
+                  Run all
+                </button>
+              </div>
             </div>
           )}
         </div>
