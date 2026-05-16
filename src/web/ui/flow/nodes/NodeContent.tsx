@@ -109,7 +109,7 @@ function OutputContent({ node, onChange, onShowPrompt }: NodeContentProps) {
             </button>
           </div>
         )}
-        {onShowPrompt && currentUrl && (
+        {onShowPrompt && (
           <button
             className="preview-prompt-button nodrag nopan nowheel"
             type="button"

@@ -74,6 +74,7 @@
   left: 100%;
   min-width: 12.222rem;
   z-index: 40;
+  overflow: visible;
 }
 
 /* Menu flyout styles */
@@ -81,6 +82,11 @@
 
 .menu-item-container {
   position: relative;
+}
+
+@keyframes ix-submenu-enter {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .menu-submenu {
@@ -96,5 +102,6 @@
   background: var(--ui-bg-surface);
   box-shadow: var(--ui-shadow-lg);
   z-index: 50;
-  animation: ix-dropdown-enter 0.1s ease;
+  animation: ix-submenu-enter 0.12s ease both;
+  transform-origin: left center;
 }

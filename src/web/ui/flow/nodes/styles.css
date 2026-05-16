@@ -192,14 +192,18 @@
   right: -0.556rem;
 }
 
+/* React Flow default handle border override */
+.react-flow__handle {
+  border: none !important;
+  box-shadow: none !important;
+}
+
 /* Handles */
 .ix-handle {
   width: 1rem;
   height: 1rem;
-  border: 2px solid var(--ui-bg-panel);
   border-radius: 50%;
   background: var(--node-accent);
-  box-shadow: 0 0 0 0.056rem rgba(0, 0, 0, 0.3);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -796,6 +800,18 @@
 .preview-prompt-button:hover {
   border-color: var(--node-accent);
   color: var(--ui-text-primary);
+}
+
+/* Show overlay buttons only on hover over the preview area */
+.ix-output-preview .preview-nav,
+.ix-output-preview .preview-prompt-button {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.ix-output-preview:hover .preview-nav,
+.ix-output-preview:hover .preview-prompt-button {
+  opacity: 1;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */

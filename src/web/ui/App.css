@@ -203,6 +203,10 @@
   animation: modal-enter 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.shortcuts-modal {
+  width: min(28rem, calc(100vw - 2.667rem));
+}
+
 .assets-modal {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -346,7 +350,7 @@
 .settings-row,
 .shortcut-list div {
   border: 1px solid var(--ui-border-subtle);
-  border-radius: var(--ui-radius-md);
+  border-radius: var(--ui-radius-lg);
   padding: var(--ui-space-4);
   background: var(--ui-bg-panel);
 }
@@ -359,7 +363,7 @@
 
 .settings-status span,
 .settings-row span {
-  color: var(--ui-text-dim);
+  color: var(--ui-text-muted);
   font-size: var(--ui-text-xs);
   font-weight: 500;
   text-transform: uppercase;
@@ -367,12 +371,9 @@
 }
 
 .settings-row {
-  grid-template-columns: 6.667rem minmax(0, 1fr) 3rem;
+  grid-template-columns: 9rem minmax(0, 1fr) 3.5rem;
   align-items: center;
-}
-
-.settings-row input {
-  accent-color: var(--ui-text-dim);
+  gap: var(--ui-space-4);
 }
 
 .shortcut-list div {
@@ -465,7 +466,7 @@
   padding: 0.25rem;
   background: var(--ui-bg-surface);
   box-shadow: var(--ui-shadow-lg);
-  animation: ix-dropdown-enter 0.1s ease;
+  animation: ix-dropdown-enter 0.1s ease both;
 }
 
 .menu-backdrop {
@@ -491,6 +492,7 @@
   box-shadow: 0 0 0 1px var(--ui-border-accent) inset;
 }
 
-.settings-row [data-slot="select-trigger"] {
+.settings-row > [data-slot="select-trigger"] {
   width: 100%;
+  grid-column: 2 / -1;
 }
