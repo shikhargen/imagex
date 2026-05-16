@@ -21,9 +21,12 @@ export class FlowStore {
   private edgesMap = new Map<string, UiEdge>();
   private cachedNodes: UiNode[] = [];
   private cachedEdges: UiEdge[] = [];
+  private renderNodesListeners = new Set<Listener>();
   private nodesListeners = new Set<Listener>();
   private edgesListeners = new Set<Listener>();
   private nodeListeners = new Map<string, Set<Listener>>();
+  private graphListeners = new Set<Listener>();
+  private graphVersion = 0;
 
   // ─── Reads ─────────────────────────────────────────────────────────────────
 
@@ -39,16 +42,21 @@ export class FlowStore {
 
   // ─── Writes ────────────────────────────────────────────────────────────────
 
-  setNodes(nodes: UiNode[]): void {
+  setNodes(nodes: UiNode[], options?: { transient?: boolean }): void {
     this.nodesMap = new Map(nodes.map((n) => [n.id, n]));
     this.cachedNodes = nodes;
-    this.notifyNodesListeners();
+    this.notifyRenderNodesListeners();
+    if (!options?.transient) {
+      this.notifyNodesListeners();
+      this.notifyGraphListeners();
+    }
   }
 
   setEdges(edges: UiEdge[]): void {
     this.edgesMap = new Map(edges.map((e) => [e.id, e]));
     this.cachedEdges = edges;
     this.notifyEdgesListeners();
+    this.notifyGraphListeners();
   }
 
   updateNode(id: string, updater: (node: UiNode) => UiNode): void {
@@ -85,6 +93,11 @@ export class FlowStore {
     return () => this.nodesListeners.delete(listener);
   }
 
+  subscribeRenderNodes(listener: Listener): () => void {
+    this.renderNodesListeners.add(listener);
+    return () => this.renderNodesListeners.delete(listener);
+  }
+
   subscribeEdges(listener: Listener): () => void {
     this.edgesListeners.add(listener);
     return () => this.edgesListeners.delete(listener);
@@ -103,14 +116,32 @@ export class FlowStore {
     };
   }
 
+  subscribeGraph(listener: Listener): () => void {
+    this.graphListeners.add(listener);
+    return () => this.graphListeners.delete(listener);
+  }
+
+  getGraphVersion(): number {
+    return this.graphVersion;
+  }
+
   // ─── Private ───────────────────────────────────────────────────────────────
 
   private notifyNodesListeners(): void {
     for (const fn of this.nodesListeners) fn();
   }
 
+  private notifyRenderNodesListeners(): void {
+    for (const fn of this.renderNodesListeners) fn();
+  }
+
   private notifyEdgesListeners(): void {
     for (const fn of this.edgesListeners) fn();
+  }
+
+  private notifyGraphListeners(): void {
+    this.graphVersion += 1;
+    for (const fn of this.graphListeners) fn();
   }
 }
 
@@ -122,7 +153,7 @@ export const flowStore = new FlowStore();
 
 export function useFlowNodes(): UiNode[] {
   return useSyncExternalStore(
-    useCallback((cb: Listener) => flowStore.subscribeNodes(cb), []),
+    useCallback((cb: Listener) => flowStore.subscribeRenderNodes(cb), []),
     () => flowStore.getNodes()
   );
 }
@@ -131,5 +162,12 @@ export function useFlowEdges(): UiEdge[] {
   return useSyncExternalStore(
     useCallback((cb: Listener) => flowStore.subscribeEdges(cb), []),
     () => flowStore.getEdges()
+  );
+}
+
+export function useFlowGraphVersion(): number {
+  return useSyncExternalStore(
+    useCallback((cb: Listener) => flowStore.subscribeGraph(cb), []),
+    () => flowStore.getGraphVersion()
   );
 }

@@ -57,6 +57,10 @@ export function setPreviewResolution(value: number): void {
   for (const fn of resolutionListeners) fn();
 }
 
+export function getPreviewResolution(): number {
+  return previewMaxLongEdge;
+}
+
 export function onResolutionChange(listener: () => void): () => void {
   resolutionListeners.add(listener);
   return () => resolutionListeners.delete(listener);
@@ -97,10 +101,11 @@ export function renderToCanvas(
   canvas: HTMLCanvasElement,
   sourceImg: HTMLImageElement,
   chain: ImageStep[],
+  maxLongEdge = previewMaxLongEdge,
 ): void {
   const renderer = getSharedRenderer();
   if (!renderer) throw new Error('WebGL is not available for image rendering.');
-  renderer.renderToCanvas(canvas, sourceImg, chain, previewMaxLongEdge);
+  renderer.renderToCanvas(canvas, sourceImg, chain, maxLongEdge > 0 ? maxLongEdge : undefined);
 }
 
 export async function processImageChain(sourceUrl: string, chain: ImageStep[]): Promise<ImageBitmap> {

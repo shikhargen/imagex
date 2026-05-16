@@ -1,5 +1,5 @@
 .ix-node {
-  contain: layout style;
+  contain: layout style paint;
   width: var(
     --node-width,
     calc(
@@ -650,6 +650,7 @@
   border: 1px solid var(--ui-border-default);
   border-radius: var(--ui-radius-xl);
   background: var(--ui-bg-panel);
+  contain: layout paint style;
 }
 
 .ix-asset-preview img {
@@ -664,6 +665,7 @@
   position: relative;
   overflow: hidden;
   padding: var(--ui-space-4);
+  contain: layout paint style;
 }
 
 .ix-output-preview img {
@@ -1015,7 +1017,8 @@
   margin: 0.5rem 0.625rem 0.375rem;
   border-radius: var(--ui-radius-lg);
   overflow: hidden;
-  clip-path: inset(0 round var(--ui-radius-lg));
+  background: var(--ui-bg-panel);
+  contain: layout paint style;
 }
 
 .ix-canvas-preview {

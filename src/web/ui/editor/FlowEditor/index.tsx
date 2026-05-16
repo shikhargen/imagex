@@ -19,7 +19,7 @@ import './styles.css';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { NodeType } from '../../../../shared/types.js';
 import { nodeMeta } from '../../flow/meta.js';
-import { flowStore, useFlowNodes, useFlowEdges } from '../../../state/flowStore.js';
+import { flowStore, useFlowNodes, useFlowEdges, useFlowGraphVersion } from '../../../state/flowStore.js';
 import { isCompatibleConnection } from '../../flow/ports.js';
 import type { UiEdge, UiNode } from '../../flow/types.js';
 import {
@@ -94,12 +94,15 @@ export function FlowEditor({
   // Read nodes/edges from FlowStore (not props) — avoids parent re-render cascades
   const nodes = useFlowNodes();
   const edges = useFlowEdges();
+  const graphVersion = useFlowGraphVersion();
   const hasFrames = useMemo(() => nodes.some((node) => node.type === 'frame'), [nodes]);
+  const canvasRef = useRef<HTMLElement | null>(null);
+  const viewportMovingTimeoutRef = useRef<number>(0);
 
   // Keep GraphEngine in sync with the current graph topology
   useEffect(() => {
-    const workflowNodes = nodes.map((n) => n.data.workflowNode);
-    const workflowEdges = edges.map((e) => {
+    const workflowNodes = flowStore.getNodes().map((n) => n.data.workflowNode);
+    const workflowEdges = flowStore.getEdges().map((e) => {
       const edge: import('../../../../shared/types.js').ImageXEdge = {
         id: e.id,
         source: e.source,
@@ -110,7 +113,7 @@ export function FlowEditor({
       return edge;
     });
     graphEngine.setGraph(workflowNodes, workflowEdges);
-  }, [nodes, edges]);
+  }, [graphVersion]);
 
   const edgeReconnectSuccessful = useRef(true);
   const frameDragRef = useRef<{ id: string; position: { x: number; y: number } } | null>(null);
@@ -119,13 +122,11 @@ export function FlowEditor({
   // Stable change handlers — write to flowStore only (App subscribes via flowStore)
   const handleNodesChange = useCallback(
     (changes: NodeChange<UiNode>[]) => {
-      // Filter: skip position and dimension changes during drag (ReactFlow handles visually)
-      // Only process selection and removal changes immediately
-      const meaningful = changes.filter((c) => c.type === 'select' || c.type === 'remove');
-      if (meaningful.length === 0) return;
+      if (changes.length === 0) return;
       const current = flowStore.getNodes();
-      const next = applyNodeChanges(meaningful, current);
-      flowStore.setNodes(next);
+      const next = applyNodeChanges(changes, current);
+      const transient = changes.every((change) => change.type === 'position' && change.dragging);
+      flowStore.setNodes(next, { transient });
     },
     []
   );
@@ -197,6 +198,30 @@ export function FlowEditor({
     (connection: Connection | UiEdge) => isCompatibleConnection(connection, flowStore.getNodes().map((node) => node.data.workflowNode), flowStore.getEdges()),
     [],
   );
+  const setViewportMoving = useCallback((moving: boolean) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (viewportMovingTimeoutRef.current) {
+      window.clearTimeout(viewportMovingTimeoutRef.current);
+      viewportMovingTimeoutRef.current = 0;
+    }
+    if (moving) {
+      canvas.classList.add('viewport-moving');
+      return;
+    }
+    viewportMovingTimeoutRef.current = window.setTimeout(() => {
+      canvas.classList.remove('viewport-moving');
+      viewportMovingTimeoutRef.current = 0;
+    }, 80);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (viewportMovingTimeoutRef.current) window.clearTimeout(viewportMovingTimeoutRef.current);
+    };
+  }, []);
+  const handleMoveStart = useCallback(() => setViewportMoving(true), [setViewportMoving]);
+  const handleMoveEnd = useCallback(() => setViewportMoving(false), [setViewportMoving]);
 
   useEffect(() => {
     const canvas = document.querySelector('.react-flow__pane') as HTMLElement | null;
@@ -219,7 +244,7 @@ export function FlowEditor({
   }, [placingNodeId, onPlacingMove]);
 
   return (
-    <section className="canvas">
+    <section className="canvas" ref={canvasRef}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -256,7 +281,7 @@ export function FlowEditor({
           frameDragRef.current = { id: node.id, position: node.position };
         }}
         onNodeDragStop={(_, node, nodes) => {
-          // Persist final positions to flowStore (we skipped position changes during drag)
+          // Persist final positions to the durable flow store after transient live drag updates.
           const currentNodes = flowStore.getNodes();
           const updatedNodes = currentNodes.map((n) => {
             const rfNode = nodes.find((rf) => rf.id === n.id);
@@ -320,6 +345,8 @@ export function FlowEditor({
           onPaneClickClear();
         }}
         fitView
+        onMoveStart={handleMoveStart}
+        onMoveEnd={handleMoveEnd}
         fitViewOptions={memoizedFitViewOptions}
         minZoom={0.25}
         maxZoom={2.5}

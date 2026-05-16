@@ -426,7 +426,7 @@ function DownloadContent({ node, onChange, connectedHandles = [] }: { node: Imag
     try {
       const img = await loadImage(sourceUrl);
       const exportCanvas = document.createElement('canvas');
-      renderToCanvas(exportCanvas, img, chain);
+      renderToCanvas(exportCanvas, img, chain, 0);
       exportCanvas.toBlob((blob) => {
         if (!blob) return;
         const url = URL.createObjectURL(blob);
