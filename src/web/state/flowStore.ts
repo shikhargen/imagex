@@ -12,6 +12,7 @@
  */
 
 import { useSyncExternalStore, useCallback } from 'react';
+import type { ImageXNode } from '../../shared/types.js';
 import type { UiEdge, UiNode } from '../ui/flow/types.js';
 
 type Listener = () => void;
@@ -21,6 +22,8 @@ export class FlowStore {
   private edgesMap = new Map<string, UiEdge>();
   private cachedNodes: UiNode[] = [];
   private cachedEdges: UiEdge[] = [];
+  private cachedWorkflowNodes: ImageXNode[] = [];
+  private cachedHasFrames = false;
   private renderNodesListeners = new Set<Listener>();
   private nodesListeners = new Set<Listener>();
   private edgesListeners = new Set<Listener>();
@@ -39,24 +42,31 @@ export class FlowStore {
   getNode(id: string): UiNode | undefined {
     return this.nodesMap.get(id);
   }
+  getWorkflowNodes(): ImageXNode[] {
+    return this.cachedWorkflowNodes;
+  }
+  hasFrames(): boolean {
+    return this.cachedHasFrames;
+  }
 
   // ─── Writes ────────────────────────────────────────────────────────────────
 
-  setNodes(nodes: UiNode[], options?: { transient?: boolean }): void {
+  setNodes(nodes: UiNode[], options?: { transient?: boolean; graph?: boolean }): void {
     this.nodesMap = new Map(nodes.map((n) => [n.id, n]));
     this.cachedNodes = nodes;
+    this.refreshNodeCaches(nodes);
     this.notifyRenderNodesListeners();
     if (!options?.transient) {
       this.notifyNodesListeners();
-      this.notifyGraphListeners();
+      if (options?.graph !== false) this.notifyGraphListeners();
     }
   }
 
-  setEdges(edges: UiEdge[]): void {
+  setEdges(edges: UiEdge[], options?: { graph?: boolean }): void {
     this.edgesMap = new Map(edges.map((e) => [e.id, e]));
     this.cachedEdges = edges;
     this.notifyEdgesListeners();
-    this.notifyGraphListeners();
+    if (options?.graph !== false) this.notifyGraphListeners();
   }
 
   updateNode(id: string, updater: (node: UiNode) => UiNode): void {
@@ -65,6 +75,7 @@ export class FlowStore {
     const updated = updater(existing);
     this.nodesMap.set(id, updated);
     this.cachedNodes = [...this.nodesMap.values()];
+    this.refreshNodeCaches(this.cachedNodes);
     // Notify per-node listeners only (avoids full re-render cascade)
     const listeners = this.nodeListeners.get(id);
     if (listeners) for (const fn of listeners) fn();
@@ -81,6 +92,7 @@ export class FlowStore {
     const updated = updater(existing);
     this.nodesMap.set(id, updated);
     this.cachedNodes = [...this.nodesMap.values()];
+    this.refreshNodeCaches(this.cachedNodes);
     const listeners = this.nodeListeners.get(id);
     if (listeners) for (const fn of listeners) fn();
     this.notifyNodesListeners();
@@ -127,6 +139,11 @@ export class FlowStore {
 
   // ─── Private ───────────────────────────────────────────────────────────────
 
+  private refreshNodeCaches(nodes: UiNode[]): void {
+    this.cachedWorkflowNodes = nodes.map((node) => node.data.workflowNode);
+    this.cachedHasFrames = nodes.some((node) => node.type === 'frame');
+  }
+
   private notifyNodesListeners(): void {
     for (const fn of this.nodesListeners) fn();
   }
@@ -169,5 +186,12 @@ export function useFlowGraphVersion(): number {
   return useSyncExternalStore(
     useCallback((cb: Listener) => flowStore.subscribeGraph(cb), []),
     () => flowStore.getGraphVersion()
+  );
+}
+
+export function useFlowHasFrames(): boolean {
+  return useSyncExternalStore(
+    useCallback((cb: Listener) => flowStore.subscribeNodes(cb), []),
+    () => flowStore.hasFrames()
   );
 }

@@ -12,14 +12,18 @@ import {
   type EdgeChange,
   MarkerType,
   type NodeChange,
+  type NodeMouseHandler,
+  type OnNodeDrag,
+  type OnSelectionChangeFunc,
   SelectionMode,
   type ReactFlowInstance,
+  type Viewport,
 } from '@xyflow/react';
 import './styles.css';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import type { NodeType } from '../../../../shared/types.js';
 import { nodeMeta } from '../../flow/meta.js';
-import { flowStore, useFlowNodes, useFlowEdges, useFlowGraphVersion } from '../../../state/flowStore.js';
+import { flowStore, useFlowNodes, useFlowEdges, useFlowGraphVersion, useFlowHasFrames } from '../../../state/flowStore.js';
 import { isCompatibleConnection } from '../../flow/ports.js';
 import type { UiEdge, UiNode } from '../../flow/types.js';
 import {
@@ -50,6 +54,8 @@ const nodeTypes = {
   download: DownloadNode,
   frame: FrameNode,
 };
+
+type FlowMouseEvent = MouseEvent | ReactMouseEvent;
 
 export function FlowEditor({
   onSelectNode,
@@ -95,11 +101,11 @@ export function FlowEditor({
   const nodes = useFlowNodes();
   const edges = useFlowEdges();
   const graphVersion = useFlowGraphVersion();
-  const hasFrames = useMemo(() => nodes.some((node) => node.type === 'frame'), [nodes]);
+  const hasFrames = useFlowHasFrames();
 
   // Keep GraphEngine in sync with the current graph topology
   useEffect(() => {
-    const workflowNodes = flowStore.getNodes().map((n) => n.data.workflowNode);
+    const workflowNodes = flowStore.getWorkflowNodes();
     const workflowEdges = flowStore.getEdges().map((e) => {
       const edge: import('../../../../shared/types.js').ImageXEdge = {
         id: e.id,
@@ -116,6 +122,15 @@ export function FlowEditor({
   const edgeReconnectSuccessful = useRef(true);
   const frameDragRef = useRef<{ id: string; position: { x: number; y: number } } | null>(null);
   const reactFlowRef = useRef<ReactFlowInstance<UiNode, UiEdge> | null>(null);
+  const canvasRef = useRef<HTMLElement | null>(null);
+  const lastViewportZoomRef = useRef<number | null>(null);
+  const zoomingTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (zoomingTimeoutRef.current) window.clearTimeout(zoomingTimeoutRef.current);
+    };
+  }, []);
 
   // Stable change handlers — write to flowStore only (App subscribes via flowStore)
   const handleNodesChange = useCallback(
@@ -124,15 +139,18 @@ export function FlowEditor({
       const current = flowStore.getNodes();
       const next = applyNodeChanges(changes, current);
       const transient = changes.every((change) => change.type === 'position' && change.dragging);
-      flowStore.setNodes(next, { transient });
+      const graphChanged = changes.some((change) => change.type === 'add' || change.type === 'remove' || change.type === 'replace');
+      flowStore.setNodes(next, { transient, graph: graphChanged });
     },
     []
   );
   const handleEdgesChange = useCallback(
     (changes: EdgeChange<UiEdge>[]) => {
+      if (changes.length === 0) return;
       const current = flowStore.getEdges();
       const next = applyEdgeChanges(changes, current);
-      flowStore.setEdges(next);
+      const graphChanged = changes.some((change) => change.type !== 'select');
+      flowStore.setEdges(next, { graph: graphChanged });
     },
     []
   );
@@ -140,7 +158,7 @@ export function FlowEditor({
     (connection: Connection) => {
       const currentNodes = flowStore.getNodes();
       const currentEdges = flowStore.getEdges();
-      if (!isCompatibleConnection(connection, currentNodes.map((node) => node.data.workflowNode), currentEdges)) return;
+      if (!isCompatibleConnection(connection, flowStore.getWorkflowNodes(), currentEdges)) return;
       onBeforeChange();
       const source = currentNodes.find((node) => node.id === connection.source);
       const target = currentNodes.find((node) => node.id === connection.target);
@@ -157,7 +175,7 @@ export function FlowEditor({
       if (!newConnection.target || !newConnection.targetHandle) return;
       const currentNodes = flowStore.getNodes();
       const currentEdges = flowStore.getEdges();
-      if (!isCompatibleConnection(newConnection, currentNodes.map((node) => node.data.workflowNode), currentEdges)) return;
+      if (!isCompatibleConnection(newConnection, flowStore.getWorkflowNodes(), currentEdges)) return;
       onBeforeChange();
       edgeReconnectSuccessful.current = true;
       const source = currentNodes.find((node) => node.id === newConnection.source);
@@ -192,10 +210,116 @@ export function FlowEditor({
   );
   const memoizedFitViewOptions = useMemo(() => ({ padding: 0.2 }), []);
   const memoizedPanOnDrag = useMemo(() => [1, 2] as [number, number], []);
+  const handleInit = useCallback(
+    (instance: ReactFlowInstance<UiNode, UiEdge>) => {
+      reactFlowRef.current = instance;
+      onFlowReady?.({
+        screenToFlowPosition: instance.screenToFlowPosition.bind(instance),
+        zoomIn: instance.zoomIn.bind(instance),
+        zoomOut: instance.zoomOut.bind(instance),
+        fitView: instance.fitView.bind(instance),
+      });
+    },
+    [onFlowReady]
+  );
   const handleIsValidConnection = useCallback(
-    (connection: Connection | UiEdge) => isCompatibleConnection(connection, flowStore.getNodes().map((node) => node.data.workflowNode), flowStore.getEdges()),
+    (connection: Connection | UiEdge) => isCompatibleConnection(connection, flowStore.getWorkflowNodes(), flowStore.getEdges()),
     [],
   );
+  const handleNodeDragStart = useCallback<NodeMouseHandler<UiNode>>((_, node) => {
+    if (placingNodeId) return;
+    onBeforeChange();
+    if (node.type === 'frame') frameDragRef.current = { id: node.id, position: node.position };
+  }, [onBeforeChange, placingNodeId]);
+  const handleNodeDrag = useCallback<OnNodeDrag<UiNode>>((_, node) => {
+    const active = frameDragRef.current;
+    if (node.type !== 'frame') {
+      if (hasFrames) onNodeDragHoverFrame(node.id, node.position);
+      return;
+    }
+    if (!active || node.id !== active.id) return;
+    const delta = { x: node.position.x - active.position.x, y: node.position.y - active.position.y };
+    if (delta.x || delta.y) onFrameDrag(node.id, delta);
+    frameDragRef.current = { id: node.id, position: node.position };
+  }, [hasFrames, onFrameDrag, onNodeDragHoverFrame]);
+  const handleNodeDragStop = useCallback<OnNodeDrag<UiNode>>((_, node, draggedNodes) => {
+    // Persist final positions to the durable flow store after transient live drag updates.
+    const finalPositions = new Map(draggedNodes.map((draggedNode) => [draggedNode.id, draggedNode.position]));
+    const updatedNodes = flowStore.getNodes().map((currentNode) => {
+      const position = finalPositions.get(currentNode.id);
+      return position ? { ...currentNode, position } : currentNode;
+    });
+    flowStore.setNodes(updatedNodes, { graph: false });
+
+    frameDragRef.current = null;
+    if (node.type !== 'frame') {
+      onNodeDragStopCheckFrames(node.id);
+      return;
+    }
+    onCommitFlow();
+  }, [onCommitFlow, onNodeDragStopCheckFrames]);
+  const handleNodeClick = useCallback<NodeMouseHandler<UiNode>>((_, node) => {
+    if (placingNodeId) {
+      onPlacingDrop?.();
+      return;
+    }
+    onSelectNode(node.id);
+  }, [onPlacingDrop, onSelectNode, placingNodeId]);
+  const handleNodeContextMenu = useCallback<NodeMouseHandler<UiNode>>((event, node) => {
+    event.preventDefault();
+    onNodeMenu(node.id, { x: event.clientX, y: event.clientY });
+  }, [onNodeMenu]);
+  const handleSelectionContextMenu = useCallback((event: FlowMouseEvent) => {
+    event.preventDefault();
+    onSelectionMenu({ x: event.clientX, y: event.clientY });
+  }, [onSelectionMenu]);
+  const handlePaneContextMenu = useCallback((event: FlowMouseEvent) => {
+    event.preventDefault();
+    if (placingNodeId) {
+      onPlacingDrop?.();
+      return;
+    }
+    onPaneMenu(
+      { x: event.clientX, y: event.clientY },
+      reactFlowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY }) || { x: 0, y: 0 }
+    );
+  }, [onPaneMenu, onPlacingDrop, placingNodeId]);
+  const handleSelectionChange = useCallback<OnSelectionChangeFunc<UiNode, UiEdge>>(
+    ({ nodes: selectedNodes, edges: selectedEdges }) => {
+      onSelectionChangeIds(
+        selectedNodes.map((node) => node.id),
+        selectedEdges.map((edge) => edge.id)
+      );
+    },
+    [onSelectionChangeIds]
+  );
+  const handleEdgeDoubleClick = useCallback((_: ReactMouseEvent, edge: UiEdge) => {
+    onBeforeChange();
+    const nextEdges = flowStore.getEdges().filter((candidate) => candidate.id !== edge.id);
+    flowStore.setEdges(nextEdges);
+  }, [onBeforeChange]);
+  const handlePaneClick = useCallback(() => {
+    if (placingNodeId) {
+      onPlacingDrop?.();
+      return;
+    }
+    onPaneClickClear();
+  }, [onPaneClickClear, onPlacingDrop, placingNodeId]);
+  const minimapNodeColor = useCallback((node: UiNode) => nodeMeta[node.type as NodeType].accent, []);
+  const clearZoomingClass = useCallback(() => {
+    zoomingTimeoutRef.current = null;
+    canvasRef.current?.classList.remove('viewport-zooming');
+  }, []);
+  const handleMove = useCallback((_: MouseEvent | TouchEvent | null, viewport: Viewport) => {
+    const previousZoom = lastViewportZoomRef.current;
+    lastViewportZoomRef.current = viewport.zoom;
+    if (previousZoom === null || Math.abs(previousZoom - viewport.zoom) < 0.0001) return;
+
+    canvasRef.current?.classList.add('viewport-zooming');
+    if (zoomingTimeoutRef.current) window.clearTimeout(zoomingTimeoutRef.current);
+    zoomingTimeoutRef.current = window.setTimeout(clearZoomingClass, 140);
+  }, [clearZoomingClass]);
+
   useEffect(() => {
     const canvas = document.querySelector('.react-flow__pane') as HTMLElement | null;
     if (!canvas) return;
@@ -217,106 +341,33 @@ export function FlowEditor({
   }, [placingNodeId, onPlacingMove]);
 
   return (
-    <section className="canvas">
+    <section className="canvas" ref={canvasRef}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
-        onInit={(instance) => {
-          reactFlowRef.current = instance;
-          onFlowReady?.({
-            screenToFlowPosition: instance.screenToFlowPosition.bind(instance),
-            zoomIn: instance.zoomIn.bind(instance),
-            zoomOut: instance.zoomOut.bind(instance),
-            fitView: instance.fitView.bind(instance),
-          });
-        }}
+        onInit={handleInit}
         onConnect={handleConnect}
         onReconnect={handleReconnect}
         onReconnectStart={handleReconnectStart}
         onReconnectEnd={handleReconnectEnd}
-        onNodeDragStart={(_, node) => {
-          if (placingNodeId) return;
-          onBeforeChange();
-          if (node.type === 'frame') frameDragRef.current = { id: node.id, position: node.position };
-        }}
-        onNodeDrag={(_, node) => {
-          const active = frameDragRef.current;
-          if (node.type !== 'frame') {
-            if (hasFrames) onNodeDragHoverFrame(node.id, node.position);
-            return;
-          }
-          if (!active || node.id !== active.id) return;
-          const delta = { x: node.position.x - active.position.x, y: node.position.y - active.position.y };
-          if (delta.x || delta.y) onFrameDrag(node.id, delta);
-          frameDragRef.current = { id: node.id, position: node.position };
-        }}
-        onNodeDragStop={(_, node, nodes) => {
-          // Persist final positions to the durable flow store after transient live drag updates.
-          const currentNodes = flowStore.getNodes();
-          const updatedNodes = currentNodes.map((n) => {
-            const rfNode = nodes.find((rf) => rf.id === n.id);
-            return rfNode ? { ...n, position: rfNode.position } : n;
-          });
-          flowStore.setNodes(updatedNodes);
-
-          frameDragRef.current = null;
-          if (node.type !== 'frame') {
-            onNodeDragStopCheckFrames(node.id);
-            return;
-          }
-          onCommitFlow();
-        }}
+        onNodeDragStart={handleNodeDragStart}
+        onNodeDrag={handleNodeDrag}
+        onNodeDragStop={handleNodeDragStop}
         edgesReconnectable
         reconnectRadius={16}
         connectionRadius={40}
         isValidConnection={handleIsValidConnection}
-        onNodeClick={(_, node) => {
-          if (placingNodeId) {
-            onPlacingDrop?.();
-            return;
-          }
-          onSelectNode(node.id);
-        }}
-        onNodeContextMenu={(event, node) => {
-          event.preventDefault();
-          onNodeMenu(node.id, { x: event.clientX, y: event.clientY });
-        }}
-        onSelectionContextMenu={(event) => {
-          event.preventDefault();
-          onSelectionMenu({ x: event.clientX, y: event.clientY });
-        }}
-        onPaneContextMenu={(event) => {
-          event.preventDefault();
-          if (placingNodeId) {
-            onPlacingDrop?.();
-            return;
-          }
-          onPaneMenu(
-            { x: event.clientX, y: event.clientY },
-            reactFlowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY }) || { x: 0, y: 0 }
-          );
-        }}
-        onSelectionChange={({ nodes: selectedNodes, edges: selectedEdges }) =>
-          onSelectionChangeIds(
-            selectedNodes.map((node) => node.id),
-            selectedEdges.map((edge) => edge.id)
-          )
-        }
-        onEdgeDoubleClick={(_, edge) => {
-          onBeforeChange();
-          const nextEdges = flowStore.getEdges().filter((candidate) => candidate.id !== edge.id);
-          flowStore.setEdges(nextEdges);
-        }}
-        onPaneClick={() => {
-          if (placingNodeId) {
-            onPlacingDrop?.();
-            return;
-          }
-          onPaneClickClear();
-        }}
+        onNodeClick={handleNodeClick}
+        onNodeContextMenu={handleNodeContextMenu}
+        onSelectionContextMenu={handleSelectionContextMenu}
+        onPaneContextMenu={handlePaneContextMenu}
+        onSelectionChange={handleSelectionChange}
+        onEdgeDoubleClick={handleEdgeDoubleClick}
+        onPaneClick={handlePaneClick}
+        onMove={handleMove}
         fitView
         fitViewOptions={memoizedFitViewOptions}
         minZoom={0.25}
@@ -329,13 +380,16 @@ export function FlowEditor({
         defaultEdgeOptions={memoizedEdgeOptions}
         elevateNodesOnSelect={false}
         nodeDragThreshold={1}
+        deleteKeyCode={null}
+        multiSelectionKeyCode={null}
+        zoomOnDoubleClick={false}
       >
         <Background variant={BackgroundVariant.Dots} color="rgba(255,255,255,0.08)" gap={24} size={1} />
         {showMinimap !== false && (
           <MiniMap
             pannable
             zoomable
-            nodeColor={(node) => nodeMeta[node.type as NodeType].accent}
+            nodeColor={minimapNodeColor}
             maskColor="rgba(2, 6, 23, 0.72)"
           />
         )}

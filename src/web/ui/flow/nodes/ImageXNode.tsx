@@ -9,6 +9,16 @@ import { NodeContent } from './NodeContent.js';
 
 type Props = NodeProps<UiNode>;
 
+function areNodeRenderPropsEqual(prev: Props, next: Props): boolean {
+  return (
+    prev.id === next.id &&
+    prev.type === next.type &&
+    prev.selected === next.selected &&
+    prev.data === next.data &&
+    prev.isConnectable === next.isConnectable
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /*  NODE TYPES                                                                */
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -47,17 +57,17 @@ function FrameNodeImpl(props: Props) {
   return <PrimitiveNode {...props} addableFields={[]} frame />;
 }
 
-export const PromptNode = memo(PromptNodeImpl);
-export const ImageNode = memo(ImageNodeImpl);
-export const ColorNode = memo(ColorNodeImpl);
-export const FileNode = memo(FileNodeImpl);
-export const CodexOutputNode = memo(CodexOutputNodeImpl);
-export const ColorBalanceNode = memo(ColorBalanceNodeImpl);
-export const RotateFlipNode = memo(RotateFlipNodeImpl);
-export const CropNode = memo(CropNodeImpl);
-export const BlurNode = memo(BlurNodeImpl);
-export const DownloadNode = memo(DownloadNodeImpl);
-export const FrameNode = memo(FrameNodeImpl);
+export const PromptNode = memo(PromptNodeImpl, areNodeRenderPropsEqual);
+export const ImageNode = memo(ImageNodeImpl, areNodeRenderPropsEqual);
+export const ColorNode = memo(ColorNodeImpl, areNodeRenderPropsEqual);
+export const FileNode = memo(FileNodeImpl, areNodeRenderPropsEqual);
+export const CodexOutputNode = memo(CodexOutputNodeImpl, areNodeRenderPropsEqual);
+export const ColorBalanceNode = memo(ColorBalanceNodeImpl, areNodeRenderPropsEqual);
+export const RotateFlipNode = memo(RotateFlipNodeImpl, areNodeRenderPropsEqual);
+export const CropNode = memo(CropNodeImpl, areNodeRenderPropsEqual);
+export const BlurNode = memo(BlurNodeImpl, areNodeRenderPropsEqual);
+export const DownloadNode = memo(DownloadNodeImpl, areNodeRenderPropsEqual);
+export const FrameNode = memo(FrameNodeImpl, areNodeRenderPropsEqual);
 
 /* ─── Primitive Node ─────────────────────────────────────────────────────── */
 

@@ -749,7 +749,6 @@
   border: 1px solid var(--ui-border-strong);
   border-radius: var(--ui-radius-xl);
   background: rgba(10, 10, 12, 0.88);
-  backdrop-filter: blur(4px);
   padding: 0.125rem;
 }
 
@@ -796,7 +795,6 @@
   background: rgba(30, 30, 30, 0.92);
   font-size: var(--ui-text-xs);
   font-weight: 500;
-  backdrop-filter: blur(4px);
   transition: border-color 0.12s ease, color 0.12s ease;
 }
 
@@ -815,6 +813,23 @@
 .ix-output-preview:hover .preview-nav,
 .ix-output-preview:hover .preview-prompt-button {
   opacity: 1;
+}
+
+.react-flow__node.dragging .ix-output-preview,
+.react-flow__node.dragging .ix-node-codex-output .ix-node-fields {
+  pointer-events: none;
+}
+
+.react-flow__node.dragging .ix-output-preview img {
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.react-flow__node.dragging .ix-output-preview .preview-nav,
+.react-flow__node.dragging .ix-output-preview .preview-prompt-button {
+  opacity: 0;
+  transition: none;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */

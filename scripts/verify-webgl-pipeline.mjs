@@ -183,6 +183,7 @@ function verifierHtml() {
         renderToCanvas,
       } from '/ui/flow/imaging/index.ts';
       import { GraphEngine } from '/state/graphEngine.ts';
+      import { FlowStore } from '/state/flowStore.ts';
 
       window.__imagexWebglVerifyResult = null;
       const result = document.getElementById('result');
@@ -354,6 +355,34 @@ function verifierHtml() {
         assert(changedBranchNotifications > 0, 'source image changes invalidate dependent branch');
         assert(untouchedBranchNotifications === 0, 'source image changes do not invalidate unrelated branches');
         engine.dispose();
+
+        const flowStore = new FlowStore();
+        let graphVersionNotifications = 0;
+        flowStore.subscribeGraph(() => { graphVersionNotifications += 1; });
+        const flowNodes = [
+          {
+            id: 'image-a',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: { workflowNode: { id: 'image-a', type: 'image', position: { x: 0, y: 0 }, data: { assetUrl: 'asset-a' } } },
+          },
+          {
+            id: 'frame-a',
+            type: 'frame',
+            position: { x: 0, y: 0 },
+            data: { workflowNode: { id: 'frame-a', type: 'frame', position: { x: 0, y: 0 }, data: {} } },
+          },
+        ];
+        flowStore.setNodes(flowNodes);
+        assert(flowStore.hasFrames(), 'flow store caches frame presence');
+        assert(flowStore.getWorkflowNodes().length === 2, 'flow store caches workflow nodes');
+        assert(graphVersionNotifications === 1, 'initial flow nodes notify graph once');
+        flowStore.setNodes(flowNodes.map((node) => node.id === 'image-a' ? { ...node, selected: true } : node), { graph: false });
+        flowStore.setNodes(flowNodes.map((node) => ({ ...node, position: { x: node.position.x + 10, y: node.position.y } })), { graph: false });
+        flowStore.setEdges([{ id: 'edge-a', source: 'image-a', target: 'frame-a', selected: true }], { graph: false });
+        assert(graphVersionNotifications === 1, 'selection and position-only flow updates do not notify graph');
+        flowStore.setEdges([{ id: 'edge-a', source: 'image-a', target: 'frame-a' }]);
+        assert(graphVersionNotifications === 2, 'topology flow updates notify graph');
 
         window.__imagexWebglVerifyResult = { ok: true, checks: checks.length, averageMs: Number(averageMs.toFixed(2)) };
         result.textContent = 'WEBGL_VERIFY_PASS ' + JSON.stringify(window.__imagexWebglVerifyResult);

@@ -12,6 +12,10 @@
   overflow: hidden;
 }
 
+.canvas .react-flow__viewport {
+  will-change: transform;
+}
+
 .react-flow__node {
   cursor: grab;
   background: transparent !important;
@@ -86,4 +90,19 @@
   background: var(--ui-bg-surface);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(12px);
+}
+
+.canvas.viewport-zooming .ix-node,
+.canvas.viewport-zooming .react-flow__node,
+.canvas.viewport-zooming .ix-canvas-preview,
+.canvas.viewport-zooming .ix-output-preview img,
+.canvas.viewport-zooming .ix-asset-preview img {
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.canvas.viewport-zooming .react-flow__controls,
+.canvas.viewport-zooming .react-flow__minimap {
+  backdrop-filter: none;
 }
