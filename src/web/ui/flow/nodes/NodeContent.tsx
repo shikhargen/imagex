@@ -16,7 +16,6 @@ import { customFieldValue, editableFieldDefinitionsFor } from '../fields/definit
 import { useCanvasRenderer } from '../imaging/useCanvasRenderer.js';
 import { graphEngine } from '../../../state/graphEngine.js';
 import { loadImage, renderToCanvas } from '../imaging/pipeline.js';
-import { isWasmReady, applyWasmStep } from '../imaging/wasmEngine.js';
 import { PreviewImage } from '../imaging/PreviewImage.js';
 import { nodeMeta } from '../meta.js';
 import { RotateFlipView } from '../views/RotateFlipView.js';
@@ -213,19 +212,10 @@ function CropContent({ node, onChange }: { node: ImageXNode; onChange: (nodeId: 
   const { hasImage } = useCanvasRenderer(canvasRef, node.id, '__source_only', node.data as Record<string, unknown>);
 
   const [imgDims, setImgDims] = useState({ w: 0, h: 0 });
-  useEffect(() => {
-    const { sourceUrl, chain } = graphEngine.traceUpstream(node.id);
-    if (!sourceUrl) return;
-    loadImage(sourceUrl).then((img) => {
-      const { w, h } = computeChainOutputDims(img.naturalWidth, img.naturalHeight, chain);
-      setImgDims({ w, h });
-    });
-  }, [node.id]);
-
   const [graphVer, setGraphVer] = useState(0);
   useEffect(() => {
-    return graphEngine.subscribe(() => setGraphVer((v) => v + 1));
-  }, []);
+    return graphEngine.subscribeNode(node.id, () => setGraphVer((v) => v + 1));
+  }, [node.id]);
   useEffect(() => {
     const { sourceUrl, chain } = graphEngine.traceUpstream(node.id);
     if (!sourceUrl) { setImgDims({ w: 0, h: 0 }); return; }
@@ -436,25 +426,7 @@ function DownloadContent({ node, onChange, connectedHandles = [] }: { node: Imag
     try {
       const img = await loadImage(sourceUrl);
       const exportCanvas = document.createElement('canvas');
-      exportCanvas.width = img.naturalWidth;
-      exportCanvas.height = img.naturalHeight;
-      const ctx = exportCanvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0);
-      if (isWasmReady()) {
-        const { open_image, putImageData } = await import('@silvia-odwyer/photon');
-        let photonImg = open_image(exportCanvas, ctx);
-        for (const step of chain) {
-          photonImg = applyWasmStep(photonImg, step);
-        }
-        const w = photonImg.get_width();
-        const h = photonImg.get_height();
-        exportCanvas.width = w;
-        exportCanvas.height = h;
-        const exportCtx = exportCanvas.getContext('2d')!;
-        putImageData(exportCanvas, exportCtx, photonImg);
-      } else {
-        renderToCanvas(exportCanvas, img, chain);
-      }
+      renderToCanvas(exportCanvas, img, chain);
       exportCanvas.toBlob((blob) => {
         if (!blob) return;
         const url = URL.createObjectURL(blob);

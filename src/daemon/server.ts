@@ -730,9 +730,9 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
   }
 
   /**
-   * Apply image editing transforms to resolved references using photon-node (same WASM engine as frontend).
+   * Apply image editing transforms to resolved references using photon-node.
    * Traces the workflow graph to find editing nodes between image sources and the output node,
-   * then processes each node's step sequentially — identical to the frontend's applyWasmStep.
+   * then processes each node's step sequentially to mirror the frontend WebGL operations.
    */
   async function applyImageEdits(
     references: Array<{ name: string; role: string; notes: string; position: string; dataUrl: string }>,
@@ -754,7 +754,7 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
       const b64Data = ref.dataUrl.split(',')[1] || '';
       let img = photon.PhotonImage.new_from_base64(b64Data);
 
-      // Process node-by-node (same operations as frontend wasmEngine applyWasmStep)
+      // Process node-by-node using the same operation semantics as the frontend WebGL path.
       for (const editNode of editingNodes) {
         img = applyNodeStep(img, editNode);
       }
@@ -772,8 +772,7 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
   }
 
   /**
-   * Apply a single editing node's operation to a PhotonImage.
-   * Mirrors the frontend's applyWasmStep exactly (scaleFactor=1 for full resolution).
+   * Apply a single editing node's operation to a PhotonImage at full resolution.
    */
   function applyNodeStep(img: InstanceType<typeof photon.PhotonImage>, node: ImageXNode): InstanceType<typeof photon.PhotonImage> {
     switch (node.type) {

@@ -11,13 +11,15 @@ The current checkout is a Vite/React web app plus a local Express daemon. Do not
 ## Current Shape
 
 - Package manager: `npm` with `package-lock.json`; do not switch package managers casually.
-- Runtime: Node.js 20+, ESM TypeScript, React 19, Vite, Tailwind CSS v4, shadcn/ui, React Flow, Zustand, photon-rs WASM, Express.
+- Runtime: Node.js 20+, ESM TypeScript, React 19, Vite, Tailwind CSS v4, shadcn/ui, React Flow, Zustand, raw WebGL frontend image pipelines, photon-node daemon transforms, Express.
 - Main commands:
   - Install: `npm install`
   - Dev app: `npm run dev` starts daemon on `127.0.0.1:3847` and Vite on `127.0.0.1:5173`
   - Web only: `npm run dev:web`
   - Daemon only: `npm run dev:daemon`
   - Type check: `npm run check`
+  - Tests: `npm test` runs typecheck plus the WebGL image-pipeline browser verifier
+  - WebGL verifier only: `npm run test:webgl`
   - Production build: `npm run build`
   - Start built daemon/UI: `npm start`
 - CLI commands:
@@ -46,9 +48,9 @@ Gitignored local notes may exist. Treat them as private context only; do not quo
 - `FlowStore` owns React Flow nodes and edges. `FlowEditor` reads via `useFlowNodes()` and `useFlowEdges()` instead of receiving node arrays through parent props.
 - Preserve the drag performance model: `handleNodesChange` filters position/dimension changes during drag, and final positions are synced on drag stop.
 - `App.tsx` currently orchestrates top-level UI state with `useEditorActions` and `useProjectActions`. `src/web/state/editorStore.ts` exists, but verify active usage before moving logic into it.
-- `GraphEngine` evaluates image-producing nodes, caches outputs per node, and propagates downstream changes through edges. Use the `ongoing` flag for live slider/drag updates so expensive downstream propagation waits until commit.
-- Edit-node previews use `useCanvasRenderer`, `processWithWasm`, and `PREVIEW_MAX_WIDTH` downscaling. Output-node and image-selector previews use `PreviewImage` to cap browser preview decoding at 2048px on the long edge. Full-resolution download/server paths must not accidentally reuse preview-scale coordinates.
-- Photon `putImageData` consumes its `PhotonImage`. Do not call `.free()` on an image after passing it to `putImageData`.
+- `GraphEngine` owns image dependency tracing and per-node/downstream invalidation. It should not eagerly reprocess every preview on global node/edge changes. Use the `ongoing` flag for live slider/drag updates so downstream invalidation waits until commit.
+- Edit-node previews, graph exports, and frontend downloads use the raw WebGL pipeline in `src/web/ui/flow/imaging/webglEngine.ts`, reached through `useCanvasRenderer` and the `pipeline.ts` compatibility exports. Keep this as a single shared WebGL renderer with cached source textures; do not create one WebGL context per node preview. Output-node and image-selector previews use `PreviewImage` to cap browser preview decoding at 2048px on the long edge.
+- Preview rendering may use `setPreviewResolution` downscaling, but full-resolution download/server paths must not accidentally reuse preview-scale coordinates.
 - Prompt compilation is structured data, not prose concatenation. Nodes compile into nested JSON objects; duplicate field labels become arrays; image placeholders start as `__imagex_ref` markers and are post-processed into `[image-N]` references.
 - Image-editing nodes generally pass image references through the compiler; actual transforms are applied by the frontend preview path and mirrored on the daemon before generation.
 - Each `codex-output` node corresponds to one generation target. Output nodes may depend on other output nodes; generation planning must keep topological order, detect circular output dependencies, and run independent topo levels in parallel.
@@ -97,7 +99,7 @@ When adding a new node type, usually update:
 - `src/web/state/graphEngine.ts` and `src/web/ui/flow/imaging/` if the node produces or transforms images
 - `src/daemon/server.ts` if generation needs server-side parity
 
-When changing image operations, keep frontend preview, full-resolution download, prompt compilation behavior, and daemon-side generation transforms aligned.
+When changing image operations, keep frontend WebGL preview, full-resolution download, prompt compilation behavior, daemon-side generation transforms, and `npm run test:webgl` coverage aligned.
 
 When changing providers or auth, keep all provider-specific code isolated under `src/providers/` and `src/auth/`, then thread only typed options through the daemon/UI. Do not mix API-key and OAuth flows without an explicit product decision.
 
@@ -126,6 +128,7 @@ When changing persistence, include schema compatibility for existing files under
 
 - Docs-only changes: no build is required, but check Markdown manually.
 - TypeScript/source changes: run `npm run check`.
+- Frontend image pipeline changes: run `npm run test:webgl`; it launches Vite and headless Chrome through DevTools Protocol to verify representative node-step outputs and a cached render-loop performance guard.
 - Changes touching build config, daemon, provider, or packaging: run `npm run build`.
 - UI behavior changes: run `npm run dev` and inspect `http://127.0.0.1:5173`.
 - Generation changes: if auth is unavailable, still verify compile endpoints and UI state; do not claim live image generation worked.

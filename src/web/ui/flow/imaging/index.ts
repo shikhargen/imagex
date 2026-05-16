@@ -1,2 +1,14 @@
-export { registerProcessor, processImageChain, processImageToDataUrl, processAndDownload, loadImage, renderToCanvas } from './pipeline.js';
-export { initWasm, isWasmReady, processWithWasm, applyWasmStep, setPreviewResolution } from './wasmEngine.js';
+export {
+  initWebgl,
+  invalidateProcessingCache,
+  isWebglReady,
+  loadImage,
+  onResolutionChange,
+  processAndDownload,
+  processImageChain,
+  processImageToBlob,
+  processImageToDataUrl,
+  renderToCanvas,
+  setPreviewResolution,
+} from './webglEngine.js';
+export type { ImageResult, ImageStep } from './webglEngine.js';

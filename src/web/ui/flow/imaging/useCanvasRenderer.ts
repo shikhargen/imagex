@@ -4,18 +4,16 @@
  * Optimizations:
  * - Batches renders to requestAnimationFrame (natural 60fps throttling)
  * - Skips re-processing if sourceUrl and chain haven't changed
- * - Uses WASM (photon-rs) for native-speed pixel operations
- * - Falls back to Canvas 2D if WASM unavailable
+ * - Uses raw WebGL shaders for realtime GPU-backed processing
  */
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { graphEngine } from '../../../state/graphEngine.js';
-import { flowStore } from '../../../state/flowStore.js';
 import { loadImage, renderToCanvas } from './pipeline.js';
-import { initWasm, isWasmReady, processWithWasm, onResolutionChange, invalidateProcessingCache } from './wasmEngine.js';
+import { initWebgl, onResolutionChange } from './webglEngine.js';
 
-// Kick off WASM initialization eagerly (non-blocking)
-initWasm();
+// Kick off WebGL initialization eagerly (non-blocking).
+void initWebgl();
 
 export function useCanvasRenderer(
   canvasRef: RefObject<HTMLCanvasElement | null>,
@@ -26,22 +24,22 @@ export function useCanvasRenderer(
   const [hasImage, setHasImage] = useState(false);
   const lastSourceRef = useRef<string | undefined>(undefined);
   const lastChainKeyRef = useRef<string>('');
+  const hasImageRef = useRef(false);
   const rafRef = useRef<number>(0);
   const pendingRef = useRef(false);
+  const renderSeqRef = useRef(0);
 
-  // Subscribe to graph topology changes (edges), output changes, node data changes, AND resolution changes
+  // Subscribe only to this node's graph invalidations and preview-resolution changes.
   const [graphVersion, setGraphVersion] = useState(0);
   useEffect(() => {
-    const unsub1 = graphEngine.subscribe(() => setGraphVersion((v) => v + 1));
-    const unsub2 = flowStore.subscribeEdges(() => setGraphVersion((v) => v + 1));
-    const unsub3 = flowStore.subscribeNodes(() => setGraphVersion((v) => v + 1));
-    const unsub4 = onResolutionChange(() => {
+    const unsub1 = graphEngine.subscribeNode(nodeId, () => setGraphVersion((v) => v + 1));
+    const unsub2 = onResolutionChange(() => {
       lastSourceRef.current = undefined;
       lastChainKeyRef.current = '';
       setGraphVersion((v) => v + 1);
     });
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
-  }, []);
+    return () => { unsub1(); unsub2(); };
+  }, [nodeId]);
 
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -49,7 +47,8 @@ export function useCanvasRenderer(
 
     const { sourceUrl, chain } = graphEngine.traceUpstream(nodeId);
     if (!sourceUrl) {
-      if (hasImage) setHasImage(false);
+      hasImageRef.current = false;
+      setHasImage(false);
       canvas.width = 0;
       canvas.height = 0;
       canvas.style.aspectRatio = '';
@@ -66,42 +65,38 @@ export function useCanvasRenderer(
 
     // Skip if nothing changed
     const chainKey = JSON.stringify(fullChain);
-    if (sourceUrl === lastSourceRef.current && chainKey === lastChainKeyRef.current && hasImage) {
+    if (sourceUrl === lastSourceRef.current && chainKey === lastChainKeyRef.current && hasImageRef.current) {
       return;
-    }
-
-    // If source URL changed, invalidate WASM caches (old pixel data is stale)
-    if (sourceUrl !== lastSourceRef.current) {
-      invalidateProcessingCache();
     }
 
     lastSourceRef.current = sourceUrl;
     lastChainKeyRef.current = chainKey;
+    const renderSeq = ++renderSeqRef.current;
 
     // Load (instant from cache) and process
     loadImage(sourceUrl).then((img) => {
+      if (renderSeq !== renderSeqRef.current) return;
       if (!canvasRef.current) return;
       try {
-        if (isWasmReady()) {
-          processWithWasm(canvasRef.current, img, fullChain);
-        } else {
-          renderToCanvas(canvasRef.current, img, fullChain);
-        }
+        renderToCanvas(canvasRef.current, img, fullChain);
         // Explicitly set CSS aspect-ratio so the container always matches
         // the canvas intrinsic dimensions, even after rotation swaps w/h.
         const c = canvasRef.current;
         if (c.width > 0 && c.height > 0) {
           c.style.aspectRatio = `${c.width} / ${c.height}`;
         }
+        hasImageRef.current = true;
         setHasImage(true);
       } catch (e) {
         console.error('Canvas render error:', e);
+        hasImageRef.current = false;
         setHasImage(false);
       }
     }).catch(() => {
+      hasImageRef.current = false;
       setHasImage(false);
     });
-  }, [canvasRef, nodeId, nodeType, nodeData, hasImage]);
+  }, [canvasRef, nodeId, nodeType, nodeData]);
 
   // Schedule render on next animation frame (batched, max 60fps)
   useEffect(() => {

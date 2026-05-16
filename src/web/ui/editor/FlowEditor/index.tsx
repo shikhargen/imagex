@@ -94,6 +94,7 @@ export function FlowEditor({
   // Read nodes/edges from FlowStore (not props) — avoids parent re-render cascades
   const nodes = useFlowNodes();
   const edges = useFlowEdges();
+  const hasFrames = useMemo(() => nodes.some((node) => node.type === 'frame'), [nodes]);
 
   // Keep GraphEngine in sync with the current graph topology
   useEffect(() => {
@@ -192,6 +193,10 @@ export function FlowEditor({
   );
   const memoizedFitViewOptions = useMemo(() => ({ padding: 0.2 }), []);
   const memoizedPanOnDrag = useMemo(() => [1, 2] as [number, number], []);
+  const handleIsValidConnection = useCallback(
+    (connection: Connection | UiEdge) => isCompatibleConnection(connection, flowStore.getNodes().map((node) => node.data.workflowNode), flowStore.getEdges()),
+    [],
+  );
 
   useEffect(() => {
     const canvas = document.querySelector('.react-flow__pane') as HTMLElement | null;
@@ -242,7 +247,7 @@ export function FlowEditor({
         onNodeDrag={(_, node) => {
           const active = frameDragRef.current;
           if (node.type !== 'frame') {
-            onNodeDragHoverFrame(node.id, node.position);
+            if (hasFrames) onNodeDragHoverFrame(node.id, node.position);
             return;
           }
           if (!active || node.id !== active.id) return;
@@ -269,7 +274,7 @@ export function FlowEditor({
         edgesReconnectable
         reconnectRadius={16}
         connectionRadius={40}
-        isValidConnection={(connection) => isCompatibleConnection(connection, flowStore.getNodes().map((node) => node.data.workflowNode), flowStore.getEdges())}
+        isValidConnection={handleIsValidConnection}
         onNodeClick={(_, node) => {
           if (placingNodeId) {
             onPlacingDrop?.();
@@ -325,6 +330,8 @@ export function FlowEditor({
         connectionLineType={ConnectionLineType.Bezier}
         defaultEdgeOptions={memoizedEdgeOptions}
         elevateNodesOnSelect={false}
+        nodeDragThreshold={1}
+        onlyRenderVisibleElements
       >
         <Background variant={BackgroundVariant.Dots} color="rgba(255,255,255,0.08)" gap={24} size={1} />
         {showMinimap !== false && (

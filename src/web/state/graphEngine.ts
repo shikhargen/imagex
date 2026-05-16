@@ -1,9 +1,8 @@
 /**
  * GraphEngine — Manages node evaluation, image processing, and downstream propagation.
  *
- * - Each node processes ONLY its own step
- * - Results are cached per-node as blob URLs
- * - Changes propagate downstream via edge traversal
+ * - Tracks image dependencies and invalidates only affected downstream nodes
+ * - Expensive image processing runs on demand for export/generation paths
  * - `ongoing` flag suppresses downstream during slider drags
  *
  * This class is imperative (not React) — React components subscribe to it
@@ -24,6 +23,8 @@ type NodeOutputListener = (nodeId: string, output: NodeOutput | null) => void;
 export class GraphEngine {
   private nodes = new Map<string, ImageXNode>();
   private edges: ImageXEdge[] = [];
+  private incomingImageEdgeByTarget = new Map<string, ImageXEdge>();
+  private outgoingEdgesBySource = new Map<string, ImageXEdge[]>();
   private outputs = new Map<string, NodeOutput>();
   private listeners = new Set<NodeOutputListener>();
   private perNodeListeners = new Map<
@@ -31,23 +32,17 @@ export class GraphEngine {
     Set<(output: NodeOutput | null) => void>
   >();
   private pendingEvals = new Map<string, number>(); // version counter for abort
+  private imageSignatures = new Map<string, string>();
 
   // ─── Public API ────────────────────────────────────────────────────────────
 
   /** Update the graph topology (call when nodes/edges change) */
   setGraph(nodes: ImageXNode[], edges: ImageXEdge[]): void {
+    const prevNodes = this.nodes;
     const prevEdges = this.edges;
     this.nodes = new Map(nodes.map((n) => [n.id, n]));
     this.edges = edges;
-
-    // Detect nodes whose incoming connectivity changed and re-evaluate them
-    const editingTypes = new Set([
-      'rotate-flip',
-      'color-balance',
-      'crop',
-      'blur',
-      'download',
-    ]);
+    this.rebuildEdgeIndexes(edges);
 
     // Build sets of "target:targetHandle<-source:sourceHandle" for fast comparison
     const edgeKey = (e: ImageXEdge) =>
@@ -66,19 +61,35 @@ export class GraphEngine {
       if (!nextSet.has(edgeKey(e))) affectedTargets.add(e.target);
     }
 
-    // Re-evaluate affected editing/download nodes
-    for (const targetId of affectedTargets) {
-      const node = this.nodes.get(targetId);
-      if (node && editingTypes.has(node.type)) {
-        void this.evaluateNode(targetId, false);
+    const affectedNodeIds = new Set<string>();
+    const nextSignatures = new Map<string, string>();
+    for (const node of nodes) {
+      const signature = this.imageSignature(node);
+      nextSignatures.set(node.id, signature);
+      if (signature !== (this.imageSignatures.get(node.id) ?? this.imageSignature(prevNodes.get(node.id)))) {
+        affectedNodeIds.add(node.id);
       }
+    }
+    for (const prevId of prevNodes.keys()) {
+      if (!this.nodes.has(prevId)) affectedNodeIds.add(prevId);
+    }
+    this.imageSignatures = nextSignatures;
+
+    // Invalidate affected editing/download nodes. Processing itself is on demand;
+    // this keeps drag/selection updates from recomputing every preview.
+    for (const targetId of affectedTargets) {
+      this.invalidateNodeAndDownstream(targetId, true);
+    }
+    for (const nodeId of affectedNodeIds) {
+      this.invalidateNodeAndDownstream(nodeId, true);
     }
   }
 
-  /** Update a single node's data and re-evaluate it */
+  /** Update a single node's data and invalidate affected previews/exports */
   updateNode(node: ImageXNode, ongoing = false): void {
     this.nodes.set(node.id, node);
-    void this.evaluateNode(node.id, ongoing);
+    this.imageSignatures.set(node.id, this.imageSignature(node));
+    this.invalidateNodeAndDownstream(node.id, !ongoing);
   }
 
   /** Get the cached output for a node */
@@ -206,6 +217,63 @@ export class GraphEngine {
     for (const fn of this.listeners) fn(nodeId, output);
   }
 
+  private invalidateNodeAndDownstream(nodeId: string, includeDownstream: boolean): void {
+    const queue = [nodeId];
+    const visited = new Set<string>();
+    while (queue.length) {
+      const currentId = queue.shift()!;
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+
+      const node = this.nodes.get(currentId);
+      if (node && (this.isEditingType(node.type) || node.type === 'download')) {
+        const prev = this.outputs.get(currentId);
+        if (prev?.url.startsWith('blob:')) URL.revokeObjectURL(prev.url);
+        this.outputs.delete(currentId);
+        this.pendingEvals.set(currentId, (this.pendingEvals.get(currentId) || 0) + 1);
+
+        const nodeListeners = this.perNodeListeners.get(currentId);
+        if (nodeListeners) {
+          for (const fn of nodeListeners) fn(null);
+        }
+        for (const fn of this.listeners) fn(currentId, null);
+      }
+
+      if (!includeDownstream) continue;
+      for (const edge of this.outgoingEdgesBySource.get(currentId) ?? []) {
+        if (edge.source === currentId) queue.push(edge.target);
+      }
+    }
+  }
+
+  private isEditingType(type: string): boolean {
+    return type === 'rotate-flip' || type === 'color-balance' || type === 'crop' || type === 'blur';
+  }
+
+  private imageSignature(node: ImageXNode | undefined): string {
+    if (!node) return '';
+    if (node.type === 'image') {
+      return JSON.stringify({
+        type: node.type,
+        assetUrl: node.data.assetUrl,
+        assetId: node.data.assetId,
+        image: node.data.image,
+      });
+    }
+    if (node.type === 'codex-output') {
+      return JSON.stringify({
+        type: node.type,
+        previewUrl: node.data.previewUrl,
+        previewUrls: node.data.previewUrls,
+      });
+    }
+    if (this.isEditingType(node.type) || node.type === 'download') {
+      const { title: _title, frameId: _frameId, width: _width, height: _height, ...data } = node.data;
+      return JSON.stringify({ type: node.type, data });
+    }
+    return JSON.stringify({ type: node.type });
+  }
+
   /** Trace upstream from a node to find source URL and intermediate processing chain */
   traceUpstream(nodeId: string): {
     sourceUrl: string | undefined;
@@ -229,11 +297,7 @@ export class GraphEngine {
       if (!node) return;
 
       // Find upstream edge (image-in or field:image)
-      const upstreamEdge = this.edges.find(
-        (e) =>
-          e.target === id &&
-          (e.targetHandle === 'image-in' || e.targetHandle === 'field:image')
-      );
+      const upstreamEdge = this.incomingImageEdgeByTarget.get(id);
       if (upstreamEdge) {
         walk(upstreamEdge.source);
       }
@@ -262,6 +326,8 @@ export class GraphEngine {
     this.listeners.clear();
     this.perNodeListeners.clear();
     this.pendingEvals.clear();
+    this.incomingImageEdgeByTarget.clear();
+    this.outgoingEdgesBySource.clear();
   }
 
   // ─── Generation Export ─────────────────────────────────────────────────────
@@ -358,6 +424,21 @@ export class GraphEngine {
     // Editing nodes — return cached processed output
     const output = this.outputs.get(nodeId);
     return output?.url || null;
+  }
+
+  private rebuildEdgeIndexes(edges: ImageXEdge[]): void {
+    const incomingImageEdgeByTarget = new Map<string, ImageXEdge>();
+    const outgoingEdgesBySource = new Map<string, ImageXEdge[]>();
+    for (const edge of edges) {
+      if (edge.targetHandle === 'image-in' || edge.targetHandle === 'field:image') {
+        incomingImageEdgeByTarget.set(edge.target, edge);
+      }
+      const outgoing = outgoingEdgesBySource.get(edge.source);
+      if (outgoing) outgoing.push(edge);
+      else outgoingEdgesBySource.set(edge.source, [edge]);
+    }
+    this.incomingImageEdgeByTarget = incomingImageEdgeByTarget;
+    this.outgoingEdgesBySource = outgoingEdgesBySource;
   }
 }
 
