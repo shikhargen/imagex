@@ -57,12 +57,6 @@
   filter: none;
 }
 
-.canvas.viewport-moving .ix-node,
-.canvas.viewport-moving .ix-node * {
-  transition: none !important;
-  animation-play-state: paused !important;
-}
-
 .react-flow__controls {
   overflow: hidden;
   border: 1px solid var(--ui-border-subtle);

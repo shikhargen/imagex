@@ -96,8 +96,6 @@ export function FlowEditor({
   const edges = useFlowEdges();
   const graphVersion = useFlowGraphVersion();
   const hasFrames = useMemo(() => nodes.some((node) => node.type === 'frame'), [nodes]);
-  const canvasRef = useRef<HTMLElement | null>(null);
-  const viewportMovingTimeoutRef = useRef<number>(0);
 
   // Keep GraphEngine in sync with the current graph topology
   useEffect(() => {
@@ -198,31 +196,6 @@ export function FlowEditor({
     (connection: Connection | UiEdge) => isCompatibleConnection(connection, flowStore.getNodes().map((node) => node.data.workflowNode), flowStore.getEdges()),
     [],
   );
-  const setViewportMoving = useCallback((moving: boolean) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    if (viewportMovingTimeoutRef.current) {
-      window.clearTimeout(viewportMovingTimeoutRef.current);
-      viewportMovingTimeoutRef.current = 0;
-    }
-    if (moving) {
-      canvas.classList.add('viewport-moving');
-      return;
-    }
-    viewportMovingTimeoutRef.current = window.setTimeout(() => {
-      canvas.classList.remove('viewport-moving');
-      viewportMovingTimeoutRef.current = 0;
-    }, 80);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (viewportMovingTimeoutRef.current) window.clearTimeout(viewportMovingTimeoutRef.current);
-    };
-  }, []);
-  const handleMoveStart = useCallback(() => setViewportMoving(true), [setViewportMoving]);
-  const handleMoveEnd = useCallback(() => setViewportMoving(false), [setViewportMoving]);
-
   useEffect(() => {
     const canvas = document.querySelector('.react-flow__pane') as HTMLElement | null;
     if (!canvas) return;
@@ -244,7 +217,7 @@ export function FlowEditor({
   }, [placingNodeId, onPlacingMove]);
 
   return (
-    <section className="canvas" ref={canvasRef}>
+    <section className="canvas">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -345,8 +318,6 @@ export function FlowEditor({
           onPaneClickClear();
         }}
         fitView
-        onMoveStart={handleMoveStart}
-        onMoveEnd={handleMoveEnd}
         fitViewOptions={memoizedFitViewOptions}
         minZoom={0.25}
         maxZoom={2.5}
@@ -358,7 +329,6 @@ export function FlowEditor({
         defaultEdgeOptions={memoizedEdgeOptions}
         elevateNodesOnSelect={false}
         nodeDragThreshold={1}
-        onlyRenderVisibleElements
       >
         <Background variant={BackgroundVariant.Dots} color="rgba(255,255,255,0.08)" gap={24} size={1} />
         {showMinimap !== false && (
