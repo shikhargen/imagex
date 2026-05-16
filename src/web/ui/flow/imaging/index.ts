@@ -1,4 +1,9 @@
 export {
+  onPreviewSurfaceRefresh,
+  refreshPreviewSurfaces,
+} from './previewSurface.js';
+
+export {
   initWebgl,
   invalidateProcessingCache,
   isWebglReady,

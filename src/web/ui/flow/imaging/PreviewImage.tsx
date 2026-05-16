@@ -1,4 +1,5 @@
 import { memo, useEffect, useState } from 'react';
+import { onPreviewSurfaceRefresh } from './previewSurface.js';
 
 const DEFAULT_MAX_PREVIEW_EDGE = 2048;
 const MAX_CACHED_PREVIEWS = 64;
@@ -26,7 +27,8 @@ function PreviewImageImpl({
   maxEdge?: number;
 }) {
   const previewSrc = useBoundedPreviewSrc(src, maxEdge);
-  return <img src={previewSrc || src} alt={alt} className={className} loading="lazy" decoding="async" />;
+  const surfaceEpoch = usePreviewSurfaceEpoch();
+  return <img key={surfaceEpoch} src={previewSrc || src} alt={alt} className={className} loading="eager" decoding="async" />;
 }
 
 export const PreviewImage = memo(PreviewImageImpl);
@@ -51,6 +53,14 @@ function useBoundedPreviewSrc(src: string, maxEdge: number): string | null {
   }, [src, maxEdge]);
 
   return previewSrc;
+}
+
+function usePreviewSurfaceEpoch(): number {
+  const [epoch, setEpoch] = useState(0);
+
+  useEffect(() => onPreviewSurfaceRefresh(() => setEpoch((value) => value + 1)), []);
+
+  return epoch;
 }
 
 function acquireBoundedPreview(cacheKey: string, src: string, maxEdge: number): PreviewCacheEntry {
@@ -131,6 +141,7 @@ async function createBoundedPreview(src: string, maxEdge: number): Promise<{ pre
     return { previewSrc: src, objectUrl: null };
   }
   const objectUrl = URL.createObjectURL(blob);
+  await warmDecodedImage(objectUrl);
   return { previewSrc: objectUrl, objectUrl };
 }
 
@@ -141,9 +152,30 @@ function loadPreviewImage(src: string): Promise<HTMLImageElement> {
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error('Preview image failed to load'));
     image.src = src;
-  }).catch<HTMLImageElement>(() => {
-    const fallback = new Image();
-    fallback.src = src;
-    return fallback;
-  });
+  })
+    .then(async (image) => {
+      await decodeImage(image);
+      return image;
+    })
+    .catch<HTMLImageElement>(() => {
+      const fallback = new Image();
+      fallback.src = src;
+      return fallback;
+    });
+}
+
+async function warmDecodedImage(src: string): Promise<void> {
+  const image = new Image();
+  image.decoding = 'async';
+  image.src = src;
+  await decodeImage(image);
+}
+
+async function decodeImage(image: HTMLImageElement): Promise<void> {
+  if (typeof image.decode !== 'function') return;
+  try {
+    await image.decode();
+  } catch {
+    // The visible image element can still fall back to normal browser loading.
+  }
 }

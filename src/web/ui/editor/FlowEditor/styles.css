@@ -92,11 +92,9 @@
   backdrop-filter: blur(12px);
 }
 
-.canvas.viewport-zooming .ix-node,
-.canvas.viewport-zooming .react-flow__node,
-.canvas.viewport-zooming .ix-canvas-preview,
-.canvas.viewport-zooming .ix-output-preview img,
-.canvas.viewport-zooming .ix-asset-preview img {
+.ix-canvas-preview,
+.ix-output-preview img,
+.ix-asset-preview img {
   backface-visibility: hidden;
   transform: translateZ(0);
   will-change: transform;

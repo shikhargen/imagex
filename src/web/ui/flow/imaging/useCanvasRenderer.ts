@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { graphEngine } from '../../../state/graphEngine.js';
 import { loadImage, renderToCanvas } from './pipeline.js';
+import { onPreviewSurfaceRefresh } from './previewSurface.js';
 import { initWebgl, onResolutionChange } from './webglEngine.js';
 
 // Kick off WebGL initialization eagerly (non-blocking).
@@ -33,12 +34,14 @@ export function useCanvasRenderer(
   const [graphVersion, setGraphVersion] = useState(0);
   useEffect(() => {
     const unsub1 = graphEngine.subscribeNode(nodeId, () => setGraphVersion((v) => v + 1));
-    const unsub2 = onResolutionChange(() => {
+    const forceRender = () => {
       lastSourceRef.current = undefined;
       lastChainKeyRef.current = '';
       setGraphVersion((v) => v + 1);
-    });
-    return () => { unsub1(); unsub2(); };
+    };
+    const unsub2 = onResolutionChange(forceRender);
+    const unsub3 = onPreviewSurfaceRefresh(forceRender);
+    return () => { unsub1(); unsub2(); unsub3(); };
   }, [nodeId]);
 
   const render = useCallback(() => {

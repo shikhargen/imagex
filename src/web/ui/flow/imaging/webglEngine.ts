@@ -82,7 +82,8 @@ export function loadImage(url: string): Promise<HTMLImageElement> {
   const promise = new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => {
+    img.onload = async () => {
+      await decodeImage(img);
       imageCache.set(url, img);
       loadingPromises.delete(url);
       resolve(img);
@@ -95,6 +96,15 @@ export function loadImage(url: string): Promise<HTMLImageElement> {
   });
   loadingPromises.set(url, promise);
   return promise;
+}
+
+async function decodeImage(image: HTMLImageElement): Promise<void> {
+  if (typeof image.decode !== 'function') return;
+  try {
+    await image.decode();
+  } catch {
+    // Loaded images can still be uploaded to WebGL if decode() rejects.
+  }
 }
 
 export function renderToCanvas(

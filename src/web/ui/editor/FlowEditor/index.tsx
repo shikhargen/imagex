@@ -20,7 +20,7 @@ import {
   type Viewport,
 } from '@xyflow/react';
 import './styles.css';
-import { useCallback, useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import type { NodeType } from '../../../../shared/types.js';
 import { nodeMeta } from '../../flow/meta.js';
 import { flowStore, useFlowNodes, useFlowEdges, useFlowGraphVersion, useFlowHasFrames } from '../../../state/flowStore.js';
@@ -40,6 +40,7 @@ import {
   RotateFlipNode,
 } from '../../flow/nodes/ImageXNode.js';
 import { graphEngine } from '../../../state/graphEngine.js';
+import { refreshPreviewSurfaces } from '../../flow/imaging/index.js';
 
 const nodeTypes = {
   prompt: PromptNode,
@@ -125,6 +126,7 @@ export function FlowEditor({
   const canvasRef = useRef<HTMLElement | null>(null);
   const lastViewportZoomRef = useRef<number | null>(null);
   const zoomingTimeoutRef = useRef<number | null>(null);
+  const [flowReadyVersion, setFlowReadyVersion] = useState(0);
 
   useEffect(() => {
     return () => {
@@ -213,6 +215,7 @@ export function FlowEditor({
   const handleInit = useCallback(
     (instance: ReactFlowInstance<UiNode, UiEdge>) => {
       reactFlowRef.current = instance;
+      setFlowReadyVersion((version) => version + 1);
       onFlowReady?.({
         screenToFlowPosition: instance.screenToFlowPosition.bind(instance),
         zoomIn: instance.zoomIn.bind(instance),
@@ -319,6 +322,31 @@ export function FlowEditor({
     if (zoomingTimeoutRef.current) window.clearTimeout(zoomingTimeoutRef.current);
     zoomingTimeoutRef.current = window.setTimeout(clearZoomingClass, 140);
   }, [clearZoomingClass]);
+
+  const mediaSurfacePlan = useMemo(
+    () => ({
+      key: mediaSurfaceKey(nodes, edges),
+      expectedCanvasCount: expectedConnectedCanvasCount(nodes, edges),
+    }),
+    [nodes, edges]
+  );
+
+  useEffect(() => {
+    if (!flowReadyVersion || !mediaSurfacePlan.key) return;
+    const root = canvasRef.current;
+    if (!root) return;
+    const controller = new AbortController();
+
+    void waitForMediaSurfaces(root, mediaSurfacePlan.expectedCanvasCount, controller.signal)
+      .then(() => {
+        if (!controller.signal.aborted) refreshPreviewSurfaces();
+      })
+      .catch(() => {
+        // A newer workflow/media pass superseded this one.
+      });
+
+    return () => controller.abort();
+  }, [flowReadyVersion, mediaSurfacePlan.key, mediaSurfacePlan.expectedCanvasCount]);
 
   useEffect(() => {
     const canvas = document.querySelector('.react-flow__pane') as HTMLElement | null;
@@ -453,4 +481,119 @@ function styleConnection(connection: Connection, source: UiNode | undefined, tar
       strokeWidth: 2,
     },
   };
+}
+
+const CANVAS_PREVIEW_NODE_TYPES = new Set(['rotate-flip', 'color-balance', 'crop', 'blur', 'download']);
+const MEDIA_SURFACE_NODE_TYPES = new Set(['image', 'codex-output', ...CANVAS_PREVIEW_NODE_TYPES]);
+
+function mediaSurfaceKey(nodes: UiNode[], edges: UiEdge[]): string {
+  const mediaNodes = nodes
+    .filter((node) => MEDIA_SURFACE_NODE_TYPES.has(String(node.type)))
+    .map((node) => {
+      const data = node.data.workflowNode.data;
+      return {
+        id: node.id,
+        type: node.type,
+        assetUrl: data.assetUrl,
+        image: data.image,
+        previewUrl: data.previewUrl,
+        previewUrls: data.previewUrls,
+      };
+    });
+  if (mediaNodes.length === 0) return '';
+
+  const mediaNodeIds = new Set(mediaNodes.map((node) => node.id));
+  const mediaEdges = edges
+    .filter((edge) => mediaNodeIds.has(edge.source) || mediaNodeIds.has(edge.target))
+    .map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+    }));
+
+  return JSON.stringify({ mediaNodes, mediaEdges });
+}
+
+function expectedConnectedCanvasCount(nodes: UiNode[], edges: UiEdge[]): number {
+  const connectedTargets = new Set(edges.map((edge) => edge.target));
+  return nodes.filter((node) => CANVAS_PREVIEW_NODE_TYPES.has(String(node.type)) && connectedTargets.has(node.id)).length;
+}
+
+function waitForMediaSurfaces(root: HTMLElement, expectedCanvasCount: number, signal: AbortSignal): Promise<void> {
+  const quietMs = 180;
+  const maxMs = 6_000;
+
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+
+    let animationFrame = 0;
+    let readySince = 0;
+    const startedAt = performance.now();
+    const observer = new ResizeObserver(() => {
+      readySince = 0;
+    });
+
+    const cleanup = () => {
+      observer.disconnect();
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+      signal.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    const finish = () => {
+      cleanup();
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+    observeMediaLayoutTargets(root, observer);
+
+    const check = () => {
+      const now = performance.now();
+      if (mediaSurfacesReady(root, expectedCanvasCount)) {
+        readySince ||= now;
+        if (now - readySince >= quietMs || now - startedAt >= maxMs) {
+          finish();
+          return;
+        }
+      } else {
+        readySince = 0;
+      }
+
+      if (now - startedAt >= maxMs) {
+        finish();
+        return;
+      }
+
+      animationFrame = requestAnimationFrame(check);
+    };
+
+    animationFrame = requestAnimationFrame(check);
+  });
+}
+
+function observeMediaLayoutTargets(root: HTMLElement, observer: ResizeObserver): void {
+  const targets = root.querySelectorAll(
+    '.react-flow__renderer, .react-flow__node, .ix-edit-preview, .ix-output-preview, .ix-asset-preview, .ix-crop-area'
+  );
+  for (const target of targets) observer.observe(target);
+}
+
+function mediaSurfacesReady(root: HTMLElement, expectedCanvasCount: number): boolean {
+  const canvases = [...root.querySelectorAll('canvas.ix-canvas-preview')] as HTMLCanvasElement[];
+  const readyCanvases = canvases.filter((canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    return getComputedStyle(canvas).display !== 'none' && canvas.width > 0 && canvas.height > 0 && rect.width > 0 && rect.height > 0;
+  });
+  if (readyCanvases.length < expectedCanvasCount) return false;
+
+  const images = [...root.querySelectorAll('.ix-output-preview img, .ix-asset-preview img')] as HTMLImageElement[];
+  return images.every((image) => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0);
 }
