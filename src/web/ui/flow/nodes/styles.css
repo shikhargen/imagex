@@ -1,5 +1,5 @@
 .ix-node {
-  contain: layout style paint;
+  contain: layout style;
   width: var(
     --node-width,
     calc(

@@ -22,7 +22,7 @@
   border: 0 !important;
   box-shadow: none !important;
   padding: 0 !important;
-  contain: layout style paint;
+  contain: layout style;
 }
 
 .react-flow__node:not(.react-flow__node-frame) {
