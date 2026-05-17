@@ -17,7 +17,7 @@ export const editorShortcuts = [
     scope: 'editor',
     key: 'a',
     label: 'A',
-    description: 'Toggle add node picker',
+    description: 'Open add node menu',
   },
   {
     id: 'delete-selection',

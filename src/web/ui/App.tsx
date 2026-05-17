@@ -111,8 +111,28 @@ export function App() {
 
   // ─── Shortcuts ─────────────────────────────────────────────────────────────
 
+  function openAddNodeContextMenu() {
+    if (!project || !workflow || !editor.flowApiRef.current) return;
+    setActiveSidePanel(null);
+
+    const lastMouse = editor.lastMousePosRef.current;
+    const workspace = document.querySelector('.workspace')?.getBoundingClientRect();
+    const mouseIsInWorkspace = workspace
+      ? lastMouse.x >= workspace.left && lastMouse.x <= workspace.right && lastMouse.y >= workspace.top && lastMouse.y <= workspace.bottom
+      : Boolean(lastMouse.x || lastMouse.y);
+    const position =
+      mouseIsInWorkspace
+        ? lastMouse
+        : {
+            x: workspace ? workspace.left + workspace.width / 2 : window.innerWidth / 2,
+            y: workspace ? workspace.top + workspace.height / 2 : window.innerHeight / 2,
+          };
+    const flowPosition = editor.flowApiRef.current.screenToFlowPosition(position);
+    setMenu({ type: 'pane', x: position.x, y: position.y, flowX: flowPosition.x, flowY: flowPosition.y });
+  }
+
   useShortcuts(editorShortcuts, {
-    'toggle-add-node': () => setActiveSidePanel((current) => (current === 'nodes' ? null : 'nodes')),
+    'toggle-add-node': openAddNodeContextMenu,
     'delete-selection': editor.deleteSelection,
     'clear-selection': editor.clearSelection,
     'detach-frame': editor.detachSelectionFromFrames,
@@ -415,6 +435,7 @@ export function App() {
         workflows={projectWorkflows(project)}
         activeWorkflowId={workflow.id}
         onSelectWorkflow={projectActions.selectWorkflow}
+        onWorkflowMenu={(workflowId, position) => setMenu({ type: 'workflow', workflowId, x: position.x, y: position.y })}
         onCreateWorkflow={projectActions.createWorkflow}
         onRun={editor.runWorkflow}
         onCancel={editor.cancelWorkflow}
@@ -631,6 +652,9 @@ function FloatingContextMenu({
             items: [
               { action: 'add:color-balance', label: 'Add Color Balance' },
               { action: 'add:rotate-flip', label: 'Add Rotate/Flip' },
+              { action: 'add:crop', label: 'Add Crop' },
+              { action: 'add:blur', label: 'Add Blur' },
+              { action: 'add:download', label: 'Add Download' },
             ],
           },
           { items: [{ action: 'add:frame', label: 'Add Frame' }] },

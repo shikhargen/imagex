@@ -80,7 +80,30 @@ export function inputPortsFor(node: ImageXNode): NodePort[] {
 }
 
 export function outputPortsFor(node: ImageXNode): NodePort[] {
+  if (node.type === 'codex-output') {
+    const urls = Array.isArray(node.data.previewUrls) ? node.data.previewUrls : [];
+    const imageCount = urls.filter((url) => typeof url === 'string' && url.length > 0).length;
+    if (imageCount > 1) {
+      return Array.from({ length: imageCount }, (_, index) => ({
+        id: outputImageHandleId(index),
+        label: `Image ${index + 1}`,
+        kind: 'result' as const,
+      }));
+    }
+  }
   return outputPorts[node.type];
+}
+
+export function outputImageHandleId(index: number): string {
+  return index <= 0 ? 'result-out' : `result-out:${index}`;
+}
+
+export function outputImageIndexFromHandle(handleId: string | null | undefined): number {
+  if (!handleId || handleId === 'result-out') return 0;
+  const match = handleId.match(/^result-out:(\d+)$/);
+  if (!match) return 0;
+  const index = Number(match[1]);
+  return Number.isInteger(index) && index >= 0 ? index : 0;
 }
 
 type MinimalConnection = {
@@ -110,6 +133,19 @@ export function isCompatibleConnection(connection: MinimalConnection, nodes: Ima
   }
 
   return true;
+}
+
+export function edgeReferencesExistingPorts(edge: MinimalConnection, nodes: ImageXNode[]): boolean {
+  if (!edge.source || !edge.target || !edge.sourceHandle || !edge.targetHandle) return false;
+
+  const source = nodes.find((node) => node.id === edge.source);
+  const target = nodes.find((node) => node.id === edge.target);
+  if (!source || !target) return false;
+
+  return (
+    outputPortsFor(source).some((port) => port.id === edge.sourceHandle) &&
+    inputPortsFor(target).some((port) => port.id === edge.targetHandle)
+  );
 }
 
 /** Check if adding an edge from source→target would create a cycle */

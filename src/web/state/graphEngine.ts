@@ -11,6 +11,7 @@
 
 import type { ImageXEdge, ImageXNode } from '../../shared/types.js';
 import { processImageChain } from '../ui/flow/imaging/pipeline.js';
+import { outputImageIndexFromHandle } from '../ui/flow/ports.js';
 
 export type NodeOutput = {
   url: string; // blob: or data: URL of the processed result
@@ -289,7 +290,7 @@ export class GraphEngine {
     const chain: Array<{ type: string; params: Record<string, unknown> }> = [];
     let sourceUrl: string | undefined;
 
-    const walk = (id: string) => {
+    const walk = (id: string, sourceHandle?: string | null) => {
       if (visited.has(id)) return;
       visited.add(id);
 
@@ -299,14 +300,14 @@ export class GraphEngine {
       // Find upstream edge (image-in or field:image)
       const upstreamEdge = this.incomingImageEdgeByTarget.get(id);
       if (upstreamEdge) {
-        walk(upstreamEdge.source);
+        walk(upstreamEdge.source, upstreamEdge.sourceHandle);
       }
 
       // After walking upstream, collect this node's contribution
       if (node.type === 'image') {
         sourceUrl = (node.data.assetUrl as string) || undefined;
       } else if (node.type === 'codex-output') {
-        sourceUrl = (node.data.previewUrl as string) || undefined;
+        sourceUrl = outputPreviewUrlForHandle(node, sourceHandle);
       } else if (editingTypes.has(node.type) && id !== nodeId) {
         // Intermediate editing node — add to chain
         chain.push({ type: node.type, params: { ...node.data } });
@@ -444,3 +445,11 @@ export class GraphEngine {
 
 /** Singleton engine instance */
 export const graphEngine = new GraphEngine();
+
+function outputPreviewUrlForHandle(node: ImageXNode, sourceHandle: string | null | undefined): string | undefined {
+  const index = outputImageIndexFromHandle(sourceHandle);
+  const previewUrls = Array.isArray(node.data.previewUrls) ? node.data.previewUrls : [];
+  const indexedUrl = previewUrls[index];
+  if (typeof indexedUrl === 'string' && indexedUrl) return indexedUrl;
+  return (node.data.previewUrl as string) || undefined;
+}

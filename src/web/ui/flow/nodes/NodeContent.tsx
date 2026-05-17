@@ -75,7 +75,7 @@ function OutputContent({ node, onChange, onShowPrompt }: NodeContentProps) {
 
   return (
     <>
-      <div className="ix-output-preview">
+      <div className={`ix-output-preview ${hasMultiple && currentUrl ? 'has-active-socket' : ''}`}>
         {currentUrl ? (
           <PreviewImage src={currentUrl} alt="Output preview" />
         ) : isGenerating ? (

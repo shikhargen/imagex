@@ -2,7 +2,7 @@ import { Handle, Position } from '@xyflow/react';
 import { MoreHorizontal } from 'lucide-react';
 import { useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { nodeMeta } from '../meta.js';
-import { inputPortsFor, outputPortsFor } from '../ports.js';
+import { inputPortsFor, outputImageIndexFromHandle, outputPortsFor } from '../ports.js';
 import type { UiNodeData } from '../types.js';
 import type { ImageXNode } from '../../../../shared/types.js';
 
@@ -86,21 +86,19 @@ export function BaseNode({ data, selected, showIcon, centeredHandles, renamable,
           className={`ix-handle ix-handle-in ix-port-${port.kind}`}
           type="target"
           position={Position.Left}
-          isConnectableStart={false}
           style={{ top: '50%' }}
         />
       ))}
 
       {/* Output handles */}
-      {outputs.map((port) => (
+      {outputs.map((port, index) => (
         <Handle
           key={port.id}
           id={port.id}
-          className={`ix-handle ix-handle-out ix-port-${port.kind}`}
+          className={`ix-handle ix-handle-out ix-port-${port.kind} ${isActiveOutputHandle(node, port.id) ? 'ix-handle-active' : ''}`}
           type="source"
           position={Position.Right}
-          isConnectableEnd={false}
-          style={{ top: '50%' }}
+          style={{ top: `${outputHandleTop(index, outputs.length)}%` }}
         />
       ))}
 
@@ -108,4 +106,16 @@ export function BaseNode({ data, selected, showIcon, centeredHandles, renamable,
       {children}
     </article>
   );
+}
+
+function outputHandleTop(index: number, total: number): number {
+  if (total <= 1) return 50;
+  return ((index + 1) / (total + 1)) * 100;
+}
+
+function isActiveOutputHandle(node: ImageXNode, handleId: string): boolean {
+  if (node.type !== 'codex-output') return false;
+  const previewUrls = Array.isArray(node.data.previewUrls) ? node.data.previewUrls : [];
+  if (previewUrls.length <= 1) return false;
+  return outputImageIndexFromHandle(handleId) === (Number(node.data.previewIndex) || 0);
 }

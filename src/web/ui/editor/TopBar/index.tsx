@@ -12,6 +12,7 @@ export function TopBar({
   workflows,
   activeWorkflowId,
   onSelectWorkflow,
+  onWorkflowMenu,
   onCreateWorkflow,
   onRun,
   onCancel,
@@ -23,6 +24,7 @@ export function TopBar({
   workflows: TopBarWorkflow[];
   activeWorkflowId: string | null;
   onSelectWorkflow: (id: string) => void;
+  onWorkflowMenu?: (id: string, position: { x: number; y: number }) => void;
   onCreateWorkflow: () => void;
   onRun: (mode?: GenerationRunMode) => void;
   onCancel?: () => void | Promise<void>;
@@ -58,6 +60,10 @@ export function TopBar({
             type="button"
             className={`top-bar-tab ${wf.id === activeWorkflowId ? 'active' : ''}`}
             onClick={() => onSelectWorkflow(wf.id)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onWorkflowMenu?.(wf.id, { x: event.clientX, y: event.clientY });
+            }}
           >
             {wf.title}
           </button>

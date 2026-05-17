@@ -18,13 +18,14 @@ import {
   SelectionMode,
   type ReactFlowInstance,
   type Viewport,
+  ConnectionMode,
 } from '@xyflow/react';
 import './styles.css';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import type { NodeType } from '../../../../shared/types.js';
 import { nodeMeta } from '../../flow/meta.js';
 import { flowStore, useFlowNodes, useFlowEdges, useFlowGraphVersion, useFlowHasFrames } from '../../../state/flowStore.js';
-import { isCompatibleConnection } from '../../flow/ports.js';
+import { edgeReferencesExistingPorts, isCompatibleConnection } from '../../flow/ports.js';
 import type { UiEdge, UiNode } from '../../flow/types.js';
 import {
   BlurNode,
@@ -107,7 +108,14 @@ export function FlowEditor({
   // Keep GraphEngine in sync with the current graph topology
   useEffect(() => {
     const workflowNodes = flowStore.getWorkflowNodes();
-    const workflowEdges = flowStore.getEdges().map((e) => {
+    const currentEdges = flowStore.getEdges();
+    const validEdges = currentEdges.filter((edge) => edgeReferencesExistingPorts(edge, workflowNodes));
+    if (validEdges.length !== currentEdges.length) {
+      flowStore.setEdges(validEdges);
+      return;
+    }
+
+    const workflowEdges = validEdges.map((e) => {
       const edge: import('../../../../shared/types.js').ImageXEdge = {
         id: e.id,
         source: e.source,
@@ -166,7 +174,8 @@ export function FlowEditor({
       const target = currentNodes.find((node) => node.id === connection.target);
       const nextNodes = resetOutputPreviewForTarget(currentNodes, target);
       if (nextNodes !== currentNodes) flowStore.setNodes(nextNodes);
-      const nextEdges = addEdge(styleConnection(connection, source, target), currentEdges);
+      const baseEdges = removeExistingSingleImageInputEdges(currentEdges, target, connection.targetHandle);
+      const nextEdges = addEdge(styleConnection(connection, source, target), baseEdges);
       flowStore.setEdges(nextEdges);
     },
     [onBeforeChange]
@@ -184,7 +193,8 @@ export function FlowEditor({
       const target = currentNodes.find((node) => node.id === newConnection.target);
       const nextNodes = resetOutputPreviewForTarget(currentNodes, target);
       if (nextNodes !== currentNodes) flowStore.setNodes(nextNodes);
-      const nextEdges = currentEdges.map((edge) =>
+      const baseEdges = removeExistingSingleImageInputEdges(currentEdges, target, newConnection.targetHandle, oldEdge.id);
+      const nextEdges = baseEdges.map((edge) =>
         edge.id === oldEdge.id ? { ...styleConnection(newConnection, source, target), id: oldEdge.id } : edge
       );
       flowStore.setEdges(nextEdges);
@@ -404,6 +414,8 @@ export function FlowEditor({
         selectionMode={SelectionMode.Partial}
         selectionKeyCode={null}
         panOnDrag={memoizedPanOnDrag}
+        connectOnClick={false}
+        connectionMode={ConnectionMode.Strict}
         connectionLineType={ConnectionLineType.Bezier}
         defaultEdgeOptions={memoizedEdgeOptions}
         elevateNodesOnSelect={false}
@@ -460,6 +472,21 @@ function resetOutputPreviewForTarget(nodes: UiNode[], target: UiNode | undefined
   });
 }
 
+function removeExistingSingleImageInputEdges(
+  edges: UiEdge[],
+  target: UiNode | undefined,
+  targetHandle: string | null | undefined,
+  keepEdgeId?: string
+): UiEdge[] {
+  if (!target || targetHandle !== 'image-in' || !SINGLE_IMAGE_INPUT_NODE_TYPES.has(String(target.type))) {
+    return edges;
+  }
+  return edges.filter((edge) => {
+    if (edge.id === keepEdgeId) return true;
+    return !(edge.target === target.id && edge.targetHandle === targetHandle);
+  });
+}
+
 function styleConnection(connection: Connection, source: UiNode | undefined, target: UiNode | undefined): UiEdge {
   const accent = source ? nodeMeta[source.type as NodeType].accent : '#7a7a7a';
   return {
@@ -485,6 +512,7 @@ function styleConnection(connection: Connection, source: UiNode | undefined, tar
 
 const CANVAS_PREVIEW_NODE_TYPES = new Set(['rotate-flip', 'color-balance', 'crop', 'blur', 'download']);
 const MEDIA_SURFACE_NODE_TYPES = new Set(['image', 'codex-output', ...CANVAS_PREVIEW_NODE_TYPES]);
+const SINGLE_IMAGE_INPUT_NODE_TYPES = new Set(['rotate-flip', 'color-balance', 'crop', 'blur', 'download']);
 
 function mediaSurfaceKey(nodes: UiNode[], edges: UiEdge[]): string {
   const mediaNodes = nodes

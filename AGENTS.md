@@ -47,6 +47,7 @@ Gitignored local notes may exist. Treat them as private context only; do not quo
 - Persisted workflow data uses `ImageXWorkflow`, `ImageXNode`, and `ImageXEdge` from `src/shared/types.ts`. React Flow nodes are adapters around these workflow nodes, not a separate source of truth.
 - `FlowStore` owns React Flow nodes and edges. `FlowEditor` reads via `useFlowNodes()` and `useFlowEdges()` instead of receiving node arrays through parent props.
 - Preserve the drag performance model: React Flow must receive live transient position updates during drag so nodes visibly track the pointer, but transient drag updates must not sync the workflow or wake `GraphEngine`. Durable position sync happens on drag stop.
+- Keep React Flow handle dragging as the only connection gesture. `FlowEditor` sets `connectOnClick={false}` because React Flow's click-to-connect state can leave source/target handles without pointer events after short clicks or interrupted connection attempts. Handles should remain draggable from either side of a valid source/input pair under strict connection compatibility.
 - Keep React Flow props stable in `FlowEditor`: node/edge types live outside the component, handlers/options are memoized, and hot-path graph data such as workflow-node arrays and frame presence come from `FlowStore` caches instead of being rebuilt during pointer movement. Selection, dimension, and position-only changes must not bump the `GraphEngine` graph version.
 - ImageX node components use a custom `React.memo` comparator that ignores React Flow's position and dragging props. The React Flow wrapper owns live movement; node content should only re-render for rendered props such as `data`, `selected`, type/id, or connectability.
 - Output nodes are heavier than other nodes because they combine generated media, preview overlays, and generation controls. During `.react-flow__node.dragging`, keep output body pointer/hover work disabled and avoid opacity transitions on preview overlays; the image must remain visible.
@@ -60,7 +61,10 @@ Gitignored local notes may exist. Treat them as private context only; do not quo
 - Prompt compilation is structured data, not prose concatenation. Nodes compile into nested JSON objects; duplicate field labels become arrays; image placeholders start as `__imagex_ref` markers and are post-processed into `[image-N]` references.
 - Image-editing nodes generally pass image references through the compiler; actual transforms are applied by the frontend preview path and mirrored on the daemon before generation.
 - Each `codex-output` node corresponds to one generation target. Output nodes may depend on other output nodes; generation planning must keep topological order, detect circular output dependencies, and run independent topo levels in parallel.
+- Generated output images are individually addressable on `codex-output` source handles: `result-out` for the first image and `result-out:<index>` for later images. Preserve `sourceHandle` through frontend previews, compiler output references, and daemon reference resolution so downstream nodes can use the specific generated image the user connected.
+- Dynamic output image handles must not leave orphaned edges when previews are cleared or regenerated; prune edges whose source or target handle no longer exists before syncing graph state.
 - Duplicated output nodes may keep their previous preview, but connecting or reconnecting a new input into an output node must clear that output node's stale `previewUrl`, `previewUrls`, `generation`, and `generating` fields.
+- Image-editing nodes process one image input. Connecting or reconnecting a new edge into an edit node's `image-in` handle should replace any existing edge to that handle instead of allowing parallel image inputs.
 
 ## Generation Architecture
 
@@ -90,6 +94,7 @@ Gitignored local notes may exist. Treat them as private context only; do not quo
 - Use shadcn components already present under `src/web/components/ui` before inventing custom primitives. Use the shadcn `Select`, not native `<select>`, for app UI.
 - Use icons for tool actions where a familiar icon exists. Avoid emoji unless explicitly requested.
 - Keep node dimensions stable. If adding fields, controls, labels, previews, or loading states, check that they do not resize nodes unpredictably or make text overflow.
+- The `A` shortcut opens the same canvas add-node context menu used by right-clicking the pane; it should not toggle the sidebar node panel.
 
 ## Feature Entry Points
 

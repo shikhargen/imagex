@@ -667,10 +667,10 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     for (const ref of references) {
       // Handle output node references (__output:nodeId)
       if (ref.name.startsWith('__output:') && generatedResults) {
-        const outputNodeId = ref.name.slice('__output:'.length);
+        const { outputNodeId, imageIndex } = parseOutputImageRef(ref.name);
         const images = generatedResults.get(outputNodeId) || [];
         if (images.length > 0) {
-          const img = images[0]!;
+          const img = images[imageIndex] || images[0]!;
           const file = await readFile(img.path);
           const ext = extname(img.path).slice(1) || 'png';
           const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
@@ -855,8 +855,9 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
         }
       }
 
-      if (node.type === 'codex-output' && refName === `__output:${node.id}`) {
-        return true;
+      if (node.type === 'codex-output' && refName.startsWith('__output:')) {
+        const { outputNodeId } = parseOutputImageRef(refName);
+        if (outputNodeId === node.id) return true;
       }
 
       for (const edge of workflow.edges) {
@@ -1175,4 +1176,16 @@ function workflowFromBody(body: unknown): GenerateWorkflowRequest['workflow'] {
     return (body as GenerateWorkflowRequest).workflow;
   }
   return body as GenerateWorkflowRequest['workflow'];
+}
+
+function parseOutputImageRef(refName: string): { outputNodeId: string; imageIndex: number } {
+  const value = refName.startsWith('__output:') ? refName.slice('__output:'.length) : refName;
+  const separator = value.lastIndexOf(':');
+  if (separator <= 0) return { outputNodeId: value, imageIndex: 0 };
+
+  const possibleIndex = Number(value.slice(separator + 1));
+  if (!Number.isInteger(possibleIndex) || possibleIndex < 0) {
+    return { outputNodeId: value, imageIndex: 0 };
+  }
+  return { outputNodeId: value.slice(0, separator), imageIndex: possibleIndex };
 }

@@ -65,33 +65,40 @@ export function compileOutputNodeWorkflow(workflow: ImageXWorkflow, nodeId: stri
 
 type GraphContext = {
   nodesById: Map<string, ImageXNode>;
-  /** Maps "targetId:targetHandle" → list of source nodes connected to that input */
-  incomingByTargetHandle: Map<string, ImageXNode[]>;
+  /** Maps "targetId:targetHandle" -> list of source connections into that input */
+  incomingByTargetHandle: Map<string, SourceConnection[]>;
+};
+
+type SourceConnection = {
+  node: ImageXNode;
+  sourceHandle?: string;
 };
 
 function graphContext(workflow: ImageXWorkflow): GraphContext {
   const nodesById = new Map(workflow.nodes.map((node) => [node.id, node]));
-  const incomingByTargetHandle = new Map<string, ImageXNode[]>();
+  const incomingByTargetHandle = new Map<string, SourceConnection[]>();
   for (const edge of workflow.edges) {
     if (!edge.targetHandle) continue;
     const source = nodesById.get(edge.source);
     if (!source) continue;
     const key = `${edge.target}:${edge.targetHandle}`;
     const existing = incomingByTargetHandle.get(key) || [];
-    existing.push(source);
+    const connection: SourceConnection = { node: source };
+    if (edge.sourceHandle) connection.sourceHandle = edge.sourceHandle;
+    existing.push(connection);
     incomingByTargetHandle.set(key, existing);
   }
   return { nodesById, incomingByTargetHandle };
 }
 
 /** Get upstream nodes connected to a specific handle on a node */
-function getUpstreamForHandle(nodeId: string, handleId: string, context: GraphContext): ImageXNode[] {
+function getUpstreamForHandle(nodeId: string, handleId: string, context: GraphContext): SourceConnection[] {
   return context.incomingByTargetHandle.get(`${nodeId}:${handleId}`) || [];
 }
 
 /** Get ALL upstream nodes connected to any handle on a node */
-function getAllUpstream(nodeId: string, context: GraphContext): ImageXNode[] {
-  const upstream: ImageXNode[] = [];
+function getAllUpstream(nodeId: string, context: GraphContext): SourceConnection[] {
+  const upstream: SourceConnection[] = [];
   for (const [key, sources] of context.incomingByTargetHandle.entries()) {
     if (!key.startsWith(`${nodeId}:`)) continue;
     upstream.push(...sources);
@@ -140,8 +147,15 @@ function compileNode(node: ImageXNode, context: GraphContext, seen: Set<string>,
     case 'frame':
       return null;
     case 'codex-output':
-      return { image: { __imagex_ref: true, path: `__output:${node.id}` } };
+      return outputNodeReference(node.id);
   }
+}
+
+function compileSourceConnection(connection: SourceConnection, context: GraphContext, seen: Set<string>, resolvedImages?: ResolvedImages): unknown {
+  if (connection.node.type === 'codex-output') {
+    return outputNodeReference(connection.node.id, connection.sourceHandle);
+  }
+  return compileNode(connection.node, context, seen, resolvedImages);
 }
 
 function compilePrimitiveNode(node: ImageXNode, context: GraphContext, seen: Set<string>, resolvedImages?: ResolvedImages): unknown {
@@ -164,7 +178,7 @@ function compilePrimitiveNode(node: ImageXNode, context: GraphContext, seen: Set
     let fieldValue: unknown;
     if (upstream.length > 0) {
       // This field has connections flowing in - compile those nodes
-      const compiled = upstream.map((up) => compileNode(up, context, new Set(seen), resolvedImages)).filter(Boolean);
+      const compiled = upstream.map((up) => compileSourceConnection(up, context, new Set(seen), resolvedImages)).filter(Boolean);
       if (compiled.length === 1) {
         fieldValue = compiled[0];
       } else if (compiled.length > 1) {
@@ -211,8 +225,8 @@ function compileRotateFlipNode(node: ImageXNode, context: GraphContext, seen: Se
   // Pass through the source image as-is (transforms applied during processing, not in prompt)
   const upstream = getAllUpstream(node.id, context);
   for (const up of upstream) {
-    if (seen.has(up.id)) continue;
-    const compiled = compileNode(up, context, new Set(seen), resolvedImages);
+    if (seen.has(up.node.id)) continue;
+    const compiled = compileSourceConnection(up, context, new Set(seen), resolvedImages);
     if (compiled) return compiled;
   }
   return null;
@@ -221,8 +235,8 @@ function compileRotateFlipNode(node: ImageXNode, context: GraphContext, seen: Se
 function compilePassthroughEditNode(node: ImageXNode, context: GraphContext, seen: Set<string>, resolvedImages?: ResolvedImages): unknown {
   const upstream = getAllUpstream(node.id, context);
   for (const up of upstream) {
-    if (seen.has(up.id)) continue;
-    const compiled = compileNode(up, context, new Set(seen), resolvedImages);
+    if (seen.has(up.node.id)) continue;
+    const compiled = compileSourceConnection(up, context, new Set(seen), resolvedImages);
     if (compiled) return compiled;
   }
   return null;
@@ -232,8 +246,8 @@ function compileColorBalanceNode(node: ImageXNode, context: GraphContext, seen: 
   // Pass through the source image as-is (adjustments applied during processing, not in prompt)
   const upstream = getAllUpstream(node.id, context);
   for (const up of upstream) {
-    if (seen.has(up.id)) continue;
-    const compiled = compileNode(up, context, new Set(seen), resolvedImages);
+    if (seen.has(up.node.id)) continue;
+    const compiled = compileSourceConnection(up, context, new Set(seen), resolvedImages);
     if (compiled) return compiled;
   }
   return null;
@@ -246,8 +260,8 @@ function compileCodexOutput(output: ImageXNode, context: GraphContext, resolvedI
   const upstream = getAllUpstream(output.id, context);
 
   const inputs: unknown[] = [];
-  for (const node of upstream) {
-    const compiled = compileNode(node, context, new Set(baseSeen), resolvedImages);
+  for (const connection of upstream) {
+    const compiled = compileSourceConnection(connection, context, new Set(baseSeen), resolvedImages);
     if (compiled) inputs.push(compiled);
   }
 
@@ -282,6 +296,20 @@ function assignImagePositions(value: unknown, nextIndex: { value: number }, refs
     return result;
   }
   return value;
+}
+
+function outputNodeReference(nodeId: string, sourceHandle?: string): unknown {
+  const imageIndex = outputImageIndexFromHandle(sourceHandle);
+  const path = imageIndex > 0 ? `__output:${nodeId}:${imageIndex}` : `__output:${nodeId}`;
+  return { image: { __imagex_ref: true, path } };
+}
+
+function outputImageIndexFromHandle(handleId: string | null | undefined): number {
+  if (!handleId || handleId === 'result-out') return 0;
+  const match = handleId.match(/^result-out:(\d+)$/);
+  if (!match) return 0;
+  const index = Number(match[1]);
+  return Number.isInteger(index) && index >= 0 ? index : 0;
 }
 
 // ─── Options Builder ─────────────────────────────────────────────────────────

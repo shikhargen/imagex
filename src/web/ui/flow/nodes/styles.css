@@ -227,6 +227,18 @@
   transform: translate(50%, -50%) scale(1.4);
 }
 
+.ix-handle-active {
+  border: 1px solid rgba(255, 255, 255, 0.92) !important;
+  box-shadow:
+    0 0 0 0.111rem rgba(0, 0, 0, 0.4),
+    0 0 0 0.222rem color-mix(in srgb, var(--node-accent) 48%, transparent),
+    0 0 0.75rem color-mix(in srgb, var(--node-accent) 72%, transparent) !important;
+}
+
+.ix-handle-out.ix-handle-active:hover {
+  transform: translate(50%, -50%) scale(1.4);
+}
+
 /* Fields */
 .ix-node-fields {
   display: grid;
@@ -675,6 +687,11 @@
   border: 1px solid var(--ui-border-default);
   border-radius: var(--ui-radius-xl);
   background: var(--ui-bg-panel);
+}
+
+.ix-output-preview.has-active-socket img {
+  border-color: color-mix(in srgb, var(--node-accent) 55%, var(--ui-border-default));
+  box-shadow: 0 0 0.75rem color-mix(in srgb, var(--node-accent) 18%, transparent);
 }
 
 .empty-preview {

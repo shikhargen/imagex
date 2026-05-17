@@ -77,7 +77,6 @@ export function NodeFields({
                   className="ix-handle ix-handle-in"
                   type="target"
                   position={Position.Left}
-                  isConnectableStart={false}
                 />
               )}
 
