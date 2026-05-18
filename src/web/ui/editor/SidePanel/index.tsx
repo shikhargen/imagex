@@ -12,15 +12,14 @@ export function SidePanel({
   return (
     <aside className="side-panel">
       <div className="side-panel-inner">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="side-panel-close"
+        <button
+          type="button"
+          className="ix-close-btn side-panel-close"
           onClick={onClose}
           aria-label="Close panel"
         >
           <X size={14} />
-        </Button>
+        </button>
         {children}
       </div>
     </aside>

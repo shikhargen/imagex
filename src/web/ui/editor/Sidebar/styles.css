@@ -1,16 +1,72 @@
-/*  Thin sidebar                                                      */
+/*  Thin sidebar + logo menu                                                      */
 /* ------------------------------------------------------------------ */
+
+.logo-menu-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.logo-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  border-radius: var(--ui-radius-lg);
+}
+
+.logo-menu-btn:hover {
+  background: var(--ui-bg-hover);
+  color: var(--ui-text-secondary);
+}
+
+.logo-menu-btn.active {
+  color: var(--ui-text-primary);
+}
+
+.logo-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  aspect-ratio: 1 / 1;
+}
+
+.logo-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: white !important;
+}
+
+.logo-menu-shell {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 0.5rem);
+  min-width: 12.222rem;
+  z-index: 40;
+  overflow: visible;
+}
 
 .thin-sidebar {
   position: relative;
+  gap: var(--ui-space-1);
   z-index: 30;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   align-items: center;
-  border-right: 1px solid var(--ui-border-subtle);
-  background: var(--ui-bg-panel);
-  overflow: visible;
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--ui-space-1);
 }
 
 .thin-sidebar-top,
@@ -35,6 +91,7 @@
   cursor: pointer;
   transition: all 0.1s ease;
   position: relative;
+  border-radius: var(--ui-radius-md);
 }
 
 .thin-sidebar-btn:hover {
@@ -57,26 +114,6 @@
   background: var(--ui-accent);
 }
 
-/* Sidebar menu */
-.sidebar-menu-container {
-  position: relative;
-  width: 100%;
-}
-
-.sidebar-menu-btn {
-  min-height: 2.667rem;
-  border-bottom: 1px solid var(--ui-border-subtle);
-}
-
-.sidebar-menu-shell {
-  position: absolute;
-  top: 0;
-  left: 100%;
-  min-width: 12.222rem;
-  z-index: 40;
-  overflow: visible;
-}
-
 /* Menu flyout styles */
 /* Base .menu-shell, .menu-list, .menu-item, .menu-separator live in dropdown.css */
 
@@ -85,8 +122,14 @@
 }
 
 @keyframes ix-submenu-enter {
-  from { opacity: 0; transform: translateX(-6px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .menu-submenu {

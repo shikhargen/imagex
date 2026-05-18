@@ -1,7 +1,6 @@
 import {
   Background,
   BackgroundVariant,
-  Controls,
   MiniMap,
   ReactFlow,
   addEdge,
@@ -433,7 +432,6 @@ export function FlowEditor({
             maskColor="rgba(2, 6, 23, 0.72)"
           />
         )}
-        <Controls position="top-left" />
       </ReactFlow>
     </section>
   );

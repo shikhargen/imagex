@@ -1,22 +1,10 @@
-.top-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ui-space-4);
-  border-bottom: 1px solid var(--ui-border-subtle);
-  background: var(--ui-bg-panel);
-  padding: var(--ui-space-2) var(--ui-space-6);
-  min-height: 2.5rem;
-}
-
 .top-bar-tabs {
   display: flex;
   align-items: center;
   gap: var(--ui-space-2);
+  height: 100%;
   overflow: auto;
   min-width: 0;
-  margin-right: auto;
-  padding: var(--ui-space-1) 0;
 }
 
 .top-bar-tab {
@@ -24,13 +12,13 @@
   align-items: center;
   justify-content: center;
   gap: var(--ui-space-2);
-  height: 2rem;
+  height: 100%;
   padding: 0 var(--ui-space-5);
   border: none;
   border-radius: var(--ui-radius-md);
   background: transparent;
   color: var(--ui-text-dim);
-  font-size: var(--ui-text-sm);
+  font-size: var(--ui-text-xs);
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -70,14 +58,9 @@
   display: flex;
   align-items: center;
   gap: var(--ui-space-4);
+  height: 100%;
   flex-shrink: 0;
-}
-
-.top-bar-status {
-  color: var(--ui-text-dim);
-  font-size: var(--ui-text-xs);
-  white-space: nowrap;
-  opacity: 0.7;
+  background: var(--ui-bg-panel);
 }
 
 /* ─── Split Run Button (outline style like download node) ──────────────────── */
@@ -86,18 +69,20 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  height: 100%;
 }
 
 .ix-split-button {
   display: inline-flex;
   align-items: stretch;
-  height: 2rem;
+  height: 100%;
   border: 1px solid var(--ui-border-strong);
   background: transparent;
   color: var(--ui-text-secondary);
   overflow: hidden;
-  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease, border-radius 0.15s ease;
-  border-radius: var(--ui-radius-md);
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease,
+    border-radius 0.15s ease;
+  border-radius: var(--ui-radius-lg);
 }
 
 .ix-split-button.is-running {
@@ -187,11 +172,6 @@
 }
 
 @media (max-width: 860px) {
-  .top-bar {
-    flex-wrap: wrap;
-    align-items: flex-start;
-  }
-
   .top-bar-tabs {
     order: 3;
     width: 100%;

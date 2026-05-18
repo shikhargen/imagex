@@ -229,8 +229,7 @@
 
 .ix-handle-active {
   border: 1px solid rgba(255, 255, 255, 0.92) !important;
-  box-shadow:
-    0 0 0 0.111rem rgba(0, 0, 0, 0.4),
+  box-shadow: 0 0 0 0.111rem rgba(0, 0, 0, 0.4),
     0 0 0 0.222rem color-mix(in srgb, var(--node-accent) 48%, transparent),
     0 0 0.75rem color-mix(in srgb, var(--node-accent) 72%, transparent) !important;
 }
@@ -305,8 +304,8 @@
   width: 100%;
   min-width: 0;
   min-height: 1.75rem;
-  border: 1px solid var(--ui-border-subtle);
-  border-radius: var(--ui-radius-md);
+  border: 1px solid var(--ui-border-default);
+  border-radius: var(--ui-radius-lg);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.02);
   transition: border-color 0.1s ease;
@@ -645,6 +644,7 @@
   border: 1px solid var(--ui-border-default);
   background: var(--ui-bg-surface);
   color: var(--ui-text-primary);
+  border-radius: var(--ui-radius-md);
 }
 
 .ix-asset-picker-button span {
@@ -688,8 +688,13 @@
 }
 
 .ix-output-preview.has-active-socket img {
-  border-color: color-mix(in srgb, var(--node-accent) 55%, var(--ui-border-default));
-  box-shadow: 0 0 0.75rem color-mix(in srgb, var(--node-accent) 18%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--node-accent) 55%,
+    var(--ui-border-default)
+  );
+  box-shadow: 0 0 0.75rem
+    color-mix(in srgb, var(--node-accent) 18%, transparent);
 }
 
 .empty-preview {
@@ -744,7 +749,9 @@
 }
 
 @keyframes skeleton-dot {
-  0%, 60%, 100% {
+  0%,
+  60%,
+  100% {
     opacity: 0.2;
     transform: scale(0.8);
   }
@@ -944,7 +951,7 @@
   gap: 0.333rem;
   padding: 0.333rem 0.5rem;
   border: none;
-  border-radius: var(--ui-radius-md);
+  border-radius: var(--ui-radius-lg);
   background: transparent;
   color: var(--ui-text-dim);
   font-size: var(--ui-text-xs);

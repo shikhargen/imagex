@@ -68,7 +68,7 @@
 
 .side-panel-tabs {
   display: flex;
-  gap: 2px;
+  gap: var(--ui-space-2);
   padding: 0 var(--ui-space-5) var(--ui-space-2);
   min-height: 1.667rem;
   flex-shrink: 0;
@@ -80,7 +80,7 @@
   gap: var(--ui-space-2);
   padding: var(--ui-space-1) var(--ui-space-3);
   border: none;
-  border-radius: var(--ui-radius-sm);
+  border-radius: var(--ui-radius-md);
   background: transparent;
   color: var(--ui-text-dim);
   font-size: var(--ui-text-xs);

@@ -8,7 +8,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  font-family: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: 'Geist Variable', ui-sans-serif, system-ui, -apple-system,
+    sans-serif;
   color: #e8e8ed;
   background: #0a0a0c;
   font-size: calc(16px * var(--font-scale, 1));
@@ -55,8 +56,8 @@
 
   --ui-text-xs: 0.825rem;
   --ui-text-sm: 0.975rem;
-  --ui-text-base: 1.150rem;
-  --ui-text-lg: 1.300rem;
+  --ui-text-base: 1.15rem;
+  --ui-text-lg: 1.3rem;
   --ui-text-xl: 1.625rem;
 
   /* ─── Spacing (8px grid) ────────────────────────────────────────────────── */
@@ -227,60 +228,129 @@ button {
   cursor: not-allowed;
 }
 
+/* ─── Floating panel layout ─────────────────────────────────────────────── */
+
 .app-shell {
-  display: grid;
-  grid-template-rows: auto 1fr;
+  position: relative;
+  width: 100vw;
   height: 100vh;
   overflow: hidden;
   background: var(--ui-bg-base);
 }
 
-.app-body {
-  position: relative;
+.workspace {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
   display: grid;
-  grid-template-columns: 3.4rem minmax(0, 1fr) 0.278rem var(--right-panel, 18.889rem);
-  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
-.app-body.side-panel-open {
-  grid-template-columns: 3.4rem minmax(0, 1fr) 0.278rem var(--right-panel, 18.889rem);
+/* ─── Top bar row system ────────────────────────────────────────────── */
+
+:root {
+  --top-bar-gap: 12px;
+  --top-bar-height: 44px;
+  --top-bar-pad: 4px;
 }
 
-.app-body.right-collapsed {
-  grid-template-columns: 3.4rem minmax(0, 1fr) var(--right-panel, 2.889rem);
+/* Base floating panel */
+.floating-panel {
+  position: fixed;
+  border: 1px solid var(--ui-border-default);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-bg-panel);
+  box-shadow: var(--ui-shadow-md);
+  overflow: hidden;
 }
 
-.app-body.side-panel-open.right-collapsed {
-  grid-template-columns: 3.4rem minmax(0, 1fr) var(--right-panel, 2.889rem);
+/* Logo / menu button (top-left, square) */
+.floating-logo-btn {
+  top: var(--top-bar-gap);
+  left: var(--top-bar-gap);
+  width: var(--top-bar-height);
+  height: var(--top-bar-height);
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  overflow: visible;
 }
 
-.side-panel-overlay {
-  position: absolute;
-  top: 0;
-  left: 3.4rem;
-  bottom: 0;
+/* Workflow tabs (top-center) */
+.floating-tabs {
+  top: var(--top-bar-gap);
+  left: 4.5rem;
+  height: var(--top-bar-height);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  padding: var(--top-bar-pad);
+  max-width: 60vw;
+  overflow: visible;
+}
+
+/* Top-right actions container — invisible flex row for run + inspector */
+.top-bar-right {
+  position: fixed;
+  top: var(--top-bar-gap);
+  right: var(--top-bar-gap);
+  height: var(--top-bar-height);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-3);
+}
+
+/* Inspector toggle wrapper — provides the panel background for hover overlay */
+.inspector-toggle-wrap {
+  display: grid;
+  place-items: center;
+  width: var(--top-bar-height);
+  height: 100%;
+  border: 1px solid var(--ui-border-default);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-bg-panel);
+  box-shadow: var(--ui-shadow-md);
+}
+
+/* Sidebar pill (left, below logo) */
+.floating-sidebar {
+  top: 68px;
+  left: 12px;
+  bottom: 12px;
+  z-index: 30;
+  width: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+/* Side panel (floats right of sidebar) */
+.floating-side-panel {
+  top: 68px;
+  left: 68px;
+  bottom: 12px;
+  z-index: 25;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+/* Inspector panel (right, below run button — mirrors left side panel layout) */
+.floating-inspector {
+  top: 68px;
+  right: 12px;
+  bottom: 12px;
   z-index: 20;
   display: flex;
-  pointer-events: none;
+  flex-direction: row;
+  overflow: hidden;
 }
-
-.side-panel-overlay > * {
-  pointer-events: auto;
-}
-
-
-/* ------------------------------------------------------------------ */
-/*  Side panel                                                        */
-/* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
-/*  Node panel list                                                   */
-/* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
-/*  Asset panel compact                                               */
-/* ------------------------------------------------------------------ */
 
 .resize-handle {
   position: relative;
@@ -289,6 +359,7 @@ button {
   background: transparent;
   cursor: col-resize;
   transition: background 0.2s;
+  flex-shrink: 0;
 }
 
 .resize-handle::after {
@@ -309,19 +380,33 @@ button {
   align-items: center;
   gap: 0.556rem;
   padding: 0.222rem 0.444rem;
-  font-size: 1.600rem;
+  font-size: 1.6rem;
   font-weight: 800;
   letter-spacing: 0;
 }
 
-.workspace {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
+/* ─── Unified close button ────────────────────────────────────────────── */
+
+.ix-close-btn,
+[data-slot='button'].ix-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-md);
+  background: transparent;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.ix-close-btn:hover,
+[data-slot='button'].ix-close-btn:hover:not(:disabled) {
+  background: var(--ui-bg-hover);
+  color: var(--ui-text-primary);
+  border-color: var(--ui-border-default);
 }
 
 /* ------------------------------------------------------------------ */
@@ -347,17 +432,8 @@ kbd {
   margin: 0;
 }
 
-
 @media (max-width: 1180px) {
-  .app-shell {
-    grid-template-columns: 11.667rem 0.278rem minmax(0, 1fr);
-  }
-
-  .inspector {
-    display: none;
-  }
-
-  .inspector-rail,
+  .floating-inspector,
   .resize-handle.right {
     display: none;
   }

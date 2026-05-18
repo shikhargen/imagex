@@ -297,15 +297,11 @@ export function useEditorActions(deps: EditorActionsDeps) {
         workflowRef.current = synced;
         setWorkflow(synced);
       }
-      // Don't overwrite status while generating
-      if (!abortRef.current) setStatus('Autosaving...');
       void fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/workflow`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workflow: synced }),
-      })
-        .then(() => { if (!abortRef.current) setStatus('Autosaved'); })
-        .catch(() => { if (!abortRef.current) setStatus('Autosave failed'); });
+      });
     }, 700);
     return () => window.clearTimeout(handle);
   }, [project, workflow, nodes, edges]);

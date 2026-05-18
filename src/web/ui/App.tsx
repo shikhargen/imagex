@@ -20,9 +20,9 @@ import { AssetsPanel } from './editor/AssetsPanel/index.js';
 import { FlowEditor } from './editor/FlowEditor/index.js';
 import { InspectorPanel, InspectorToggle } from './editor/InspectorPanel/index.js';
 import { NodesPanel } from './editor/NodesPanel/index.js';
-import { Sidebar } from './editor/Sidebar/index.js';
+import { LogoMenuButton, Sidebar } from './editor/Sidebar/index.js';
 import { SidePanel } from './editor/SidePanel/index.js';
-import { TopBar } from './editor/TopBar/index.js';
+import { TopBarTabs, TopBarRunControl } from './editor/TopBar/index.js';
 import { WorkflowsPanel } from './editor/WorkflowsPanel/index.js';
 import { useEditorActions } from './editor/useEditorActions.js';
 import { useProjectActions } from './editor/useProjectActions.js';
@@ -431,28 +431,65 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <TopBar
-        workflows={projectWorkflows(project)}
-        activeWorkflowId={workflow.id}
-        onSelectWorkflow={projectActions.selectWorkflow}
-        onWorkflowMenu={(workflowId, position) => setMenu({ type: 'workflow', workflowId, x: position.x, y: position.y })}
-        onCreateWorkflow={projectActions.createWorkflow}
-        onRun={editor.runWorkflow}
-        onCancel={editor.cancelWorkflow}
-        status={status}
-        canRun={Boolean(workflow)}
-        selectedOutputCount={selectedOutputCount}
-        generationActive={generationActive}
-      />
-      <div
-        className={`app-body ${activeSidePanel ? 'side-panel-open' : ''} ${rightOpen ? '' : 'right-collapsed'}`}
-        style={
-          {
-            '--side-panel': `${activeSidePanel ? sidePanelWidth : 0}px`,
-            '--right-panel': `${rightOpen ? rightWidth : 52}px`,
-          } as CSSProperties
-        }
-      >
+      {/* Full-screen canvas workspace */}
+      <section className="workspace">
+        <FlowEditor
+          onSelectNode={editor.setSelectedId}
+          onNodeMenu={editor.openNodeMenu}
+          onBeforeChange={editor.recordHistory}
+          onPaneMenu={(position, flowPosition) => setMenu({ type: 'pane', x: position.x, y: position.y, flowX: flowPosition.x, flowY: flowPosition.y })}
+          onSelectionMenu={(position) => setMenu({ type: 'selection', x: position.x, y: position.y })}
+          onSelectionChangeIds={editor.handleSelectionChange}
+          onFrameDrag={editor.moveFrameContents}
+          onNodeDragHoverFrame={editor.handleNodeDragFrameState}
+          onNodeDragStopCheckFrames={editor.expandFramesForNode}
+          onPaneClickClear={editor.clearSelection}
+          onCommitFlow={() => editor.commitFlowToWorkflow()}
+          onFlowReady={(api) => { editor.flowApiRef.current = api; }}
+          placingNodeId={editor.placingNodeId}
+          onPlacingMove={editor.handlePlacingMove}
+          onPlacingDrop={editor.handlePlacingDrop}
+          showMinimap={showMinimap}
+        />
+      </section>
+
+      {/* Floating logo + menu button */}
+      <div className="floating-panel floating-logo-btn">
+        <LogoMenuButton
+          onMenuAction={handleTopBarMenuAction}
+          showMinimap={showMinimap}
+          rightOpen={rightOpen}
+        />
+      </div>
+
+      {/* Floating workflow tabs */}
+      <div className="floating-panel floating-tabs">
+        <TopBarTabs
+          workflows={projectWorkflows(project)}
+          activeWorkflowId={workflow.id}
+          onSelectWorkflow={projectActions.selectWorkflow}
+          onWorkflowMenu={(workflowId, position) => setMenu({ type: 'workflow', workflowId, x: position.x, y: position.y })}
+          onCreateWorkflow={projectActions.createWorkflow}
+        />
+      </div>
+
+      {/* Top-right actions container (run + inspector) */}
+      <div className="top-bar-right">
+        <TopBarRunControl
+          onRun={editor.runWorkflow}
+          onCancel={editor.cancelWorkflow}
+          status={status}
+          canRun={Boolean(workflow)}
+          selectedOutputCount={selectedOutputCount}
+          generationActive={generationActive}
+        />
+        <div className="inspector-toggle-wrap">
+          <InspectorToggle onOpen={() => setRightOpen((open) => !open)} />
+        </div>
+      </div>
+
+      {/* Floating sidebar pill */}
+      <div className="floating-panel floating-sidebar">
         <Sidebar
           activePanel={activeSidePanel}
           onOpenPanel={(id) => setActiveSidePanel((current) => (current === id ? null : id))}
@@ -460,61 +497,50 @@ export function App() {
             if (id === 'settings') openSettingsRoute();
             if (id === 'shortcuts') setShowShortcuts(true);
           }}
-          onMenuAction={handleTopBarMenuAction}
-          showMinimap={showMinimap}
-          rightOpen={rightOpen}
         />
-        {activeSidePanel && (
-          <div className="side-panel-overlay">
-            <SidePanel onClose={() => setActiveSidePanel(null)}>
-              {activeSidePanel === 'workflows' && (
-                <WorkflowsPanel
-                  workflows={projectWorkflows(project)}
-                  activeWorkflowId={workflow.id}
-                  onSelect={projectActions.selectWorkflow}
-                  onCreate={projectActions.createWorkflow}
-                  onMenu={(workflowId, position) => setMenu({ type: 'workflow', workflowId, x: position.x, y: position.y })}
-                  searchQuery={workflowSearchQuery}
-                  onSearch={setWorkflowSearchQuery}
-                />
-              )}
-              {activeSidePanel === 'nodes' && <NodesPanel onAdd={editor.addNode} />}
-              {activeSidePanel === 'assets' && workflow && (
-                <AssetsPanel
-                  assets={projectActions.assets}
-                  nodeAssets={projectActions.nodeAssets}
-                  onImport={projectActions.importAssets}
-                  onAddImageAsset={editor.addImageAssetNode}
-                  onAddNodeAsset={editor.addNodeAsset}
-                  onMenu={(assetId, position) => setMenu({ type: 'asset', assetId, x: position.x, y: position.y })}
-                />
-              )}
-            </SidePanel>
-            <ResizeHandle side="left" onResize={setSidePanelWidth} min={200} max={400} />
-          </div>
-        )}
-        <section className="workspace">
-          <FlowEditor
-            onSelectNode={editor.setSelectedId}
-            onNodeMenu={editor.openNodeMenu}
-            onBeforeChange={editor.recordHistory}
-            onPaneMenu={(position, flowPosition) => setMenu({ type: 'pane', x: position.x, y: position.y, flowX: flowPosition.x, flowY: flowPosition.y })}
-            onSelectionMenu={(position) => setMenu({ type: 'selection', x: position.x, y: position.y })}
-            onSelectionChangeIds={editor.handleSelectionChange}
-            onFrameDrag={editor.moveFrameContents}
-            onNodeDragHoverFrame={editor.handleNodeDragFrameState}
-            onNodeDragStopCheckFrames={editor.expandFramesForNode}
-            onPaneClickClear={editor.clearSelection}
-            onCommitFlow={() => editor.commitFlowToWorkflow()}
-            onFlowReady={(api) => { editor.flowApiRef.current = api; }}
-            placingNodeId={editor.placingNodeId}
-            onPlacingMove={editor.handlePlacingMove}
-            onPlacingDrop={editor.handlePlacingDrop}
-            showMinimap={showMinimap}
-          />
-        </section>
-        {rightOpen && <ResizeHandle side="right" onResize={setRightWidth} min={280} max={520} />}
-        {rightOpen ? (
+      </div>
+
+      {/* Floating side panel */}
+      {activeSidePanel && (
+        <div
+          className="floating-panel floating-side-panel"
+          style={{ '--side-panel': `${sidePanelWidth}px` } as CSSProperties}
+        >
+          <SidePanel onClose={() => setActiveSidePanel(null)}>
+            {activeSidePanel === 'workflows' && (
+              <WorkflowsPanel
+                workflows={projectWorkflows(project)}
+                activeWorkflowId={workflow.id}
+                onSelect={projectActions.selectWorkflow}
+                onCreate={projectActions.createWorkflow}
+                onMenu={(workflowId, position) => setMenu({ type: 'workflow', workflowId, x: position.x, y: position.y })}
+                searchQuery={workflowSearchQuery}
+                onSearch={setWorkflowSearchQuery}
+              />
+            )}
+            {activeSidePanel === 'nodes' && <NodesPanel onAdd={editor.addNode} />}
+            {activeSidePanel === 'assets' && workflow && (
+              <AssetsPanel
+                assets={projectActions.assets}
+                nodeAssets={projectActions.nodeAssets}
+                onImport={projectActions.importAssets}
+                onAddImageAsset={editor.addImageAssetNode}
+                onAddNodeAsset={editor.addNodeAsset}
+                onMenu={(assetId, position) => setMenu({ type: 'asset', assetId, x: position.x, y: position.y })}
+              />
+            )}
+          </SidePanel>
+          <ResizeHandle side="left" onResize={setSidePanelWidth} min={200} max={400} />
+        </div>
+      )}
+
+      {/* Floating inspector panel */}
+      {rightOpen && (
+        <div
+          className="floating-panel floating-inspector"
+          style={{ '--right-panel': `${rightWidth}px` } as CSSProperties}
+        >
+          <ResizeHandle side="right" onResize={setRightWidth} min={280} max={520} />
           <InspectorPanel
             node={editor.selectedNode}
             onChange={editor.updateNodeData}
@@ -527,10 +553,9 @@ export function App() {
             onOpenAssets={editor.openAssetPickerForField}
             onShowPrompt={(nodeId) => { void handleShowCompiledPrompt(nodeId); }}
           />
-        ) : (
-          <InspectorToggle onOpen={() => setRightOpen(true)} />
-        )}
-      </div>
+        </div>
+      )}
+
       {menu && (
         <FloatingContextMenu
           menu={menu}
@@ -768,7 +793,7 @@ function NewProjectModal({
       <section className="new-project-modal">
         <header>
           <h2>New Project</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X size={16} /></Button>
+          <button type="button" className="ix-close-btn" onClick={onClose} aria-label="Close"><X size={16} /></button>
         </header>
         <div className="new-project-form">
           <label>
@@ -919,7 +944,7 @@ function AssetsModal({
           </div>
           <div className="modal-actions">
             <Button variant="secondary" onClick={() => inputRef.current?.click()}>Import Images</Button>
-            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X size={16} /></Button>
+          <button type="button" className="ix-close-btn" onClick={onClose} aria-label="Close"><X size={16} /></button>
           </div>
           <input
             ref={inputRef}
@@ -986,7 +1011,7 @@ function SettingsModal({
       <section className="settings-modal">
         <header>
           <h2>Settings</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X size={16} /></Button>
+          <button type="button" className="ix-close-btn" onClick={onClose} aria-label="Close"><X size={16} /></button>
         </header>
         <div className="settings-content">
           <section className="settings-status">
@@ -1051,7 +1076,7 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
       <section className="settings-modal shortcuts-modal">
         <header>
           <h2>Shortcuts</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X size={16} /></Button>
+          <button type="button" className="ix-close-btn" onClick={onClose} aria-label="Close"><X size={16} /></button>
         </header>
         <div className="shortcut-list">
           {editorShortcuts.map((shortcut) => (
@@ -1073,7 +1098,7 @@ function PromptOverlay({ prompt, onClose }: { prompt: string; onClose: () => voi
       <section className="prompt-overlay">
         <header>
           <h2>Compiled Prompt</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X size={16} /></Button>
+          <button type="button" className="ix-close-btn" onClick={onClose} aria-label="Close"><X size={16} /></button>
         </header>
         {formatted ? <JsonCodeBlock code={formatted} /> : <div className="empty-preview">No prompt generated</div>}
       </section>

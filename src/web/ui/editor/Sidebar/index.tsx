@@ -46,24 +46,15 @@ export const sidebarItems: SidebarItem[] = [
   },
 ];
 
-export function Sidebar({
-  activePanel,
-  onOpenPanel,
-  onOpenModal,
+export function LogoMenuButton({
   onMenuAction,
   showMinimap,
   rightOpen,
 }: {
-  activePanel: string | null;
-  onOpenPanel: (panelId: string) => void;
-  onOpenModal: (modalId: string) => void;
   onMenuAction: (action: string) => void;
   showMinimap: boolean;
   rightOpen: boolean;
 }) {
-  const top = sidebarItems.filter((i) => i.section === 'top');
-  const bottom = sidebarItems.filter((i) => i.section === 'bottom');
-
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -74,7 +65,7 @@ export function Sidebar({
       { id: 'file-new-workflow', label: 'New workflow' },
       { id: 'file-rename-workflow', label: 'Rename workflow' },
       { id: 'file-compile-prompt', label: 'Compile prompt' },
-      { type: 'separator' },
+      { type: 'separator' as const },
       {
         id: 'edit',
         label: 'Edit',
@@ -105,7 +96,7 @@ export function Sidebar({
           },
         ],
       },
-      { type: 'separator' },
+      { type: 'separator' as const },
       {
         id: 'settings',
         label: 'Preferences',
@@ -114,7 +105,7 @@ export function Sidebar({
           { id: 'settings-shortcuts', label: 'Keyboard shortcuts' },
         ],
       },
-      { type: 'separator' },
+      { type: 'separator' as const },
       { id: 'exit-project', label: 'Back to projects' },
     ],
     [rightOpen, showMinimap]
@@ -151,87 +142,102 @@ export function Sidebar({
   }, [menuOpen]);
 
   return (
+    <div className="logo-menu-container">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`logo-menu-btn ${menuOpen ? 'active' : ''}`}
+        aria-haspopup="true"
+        aria-expanded={menuOpen}
+        aria-label="Open menu"
+        onClick={() => setMenuOpen((current) => !current)}
+        title="Menu"
+      >
+        <span className="logo-icon">
+          <LogoWhite />
+        </span>
+      </button>
+      {menuOpen && (
+        <div className="menu-shell logo-menu-shell" ref={menuRef}>
+          <div className="menu-list">
+            {menuItems.map((item, index) => {
+              if (item.type === 'separator') {
+                return (
+                  <div key={`sep-${index}`} className="menu-separator" />
+                );
+              }
+              const hasSubMenu = item.items && item.items.length > 0;
+              return (
+                <div
+                  key={item.id}
+                  className="menu-item-container"
+                  onMouseEnter={() =>
+                    hasSubMenu
+                      ? setActiveMenu(item.id!)
+                      : setActiveMenu(null)
+                  }
+                >
+                  <button
+                    type="button"
+                    className={`menu-item ${
+                      activeMenu === item.id ? 'active' : ''
+                    }`}
+                    onClick={() => {
+                      if (hasSubMenu) {
+                        setActiveMenu(
+                          activeMenu === item.id ? null : item.id!
+                        );
+                      } else {
+                        onMenuAction(item.id!);
+                        setMenuOpen(false);
+                      }
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    {hasSubMenu && <ChevronRight size={14} />}
+                  </button>
+                  {hasSubMenu && activeMenu === item.id && (
+                    <div className="menu-submenu">
+                      {item.items!.map((subItem) => (
+                        <button
+                          key={subItem.id}
+                          type="button"
+                          className="menu-item"
+                          onClick={() => {
+                            onMenuAction(subItem.id);
+                            setMenuOpen(false);
+                          }}
+                        >
+                          <span>{subItem.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Sidebar({
+  activePanel,
+  onOpenPanel,
+  onOpenModal,
+}: {
+  activePanel: string | null;
+  onOpenPanel: (panelId: string) => void;
+  onOpenModal: (modalId: string) => void;
+}) {
+  const top = sidebarItems.filter((i) => i.section === 'top');
+  const bottom = sidebarItems.filter((i) => i.section === 'bottom');
+
+  return (
     <aside className="thin-sidebar">
       <div className="thin-sidebar-top">
-        <div className="sidebar-menu-container">
-          <button
-            ref={triggerRef}
-            type="button"
-            className={`thin-sidebar-btn sidebar-menu-btn ${
-              menuOpen ? 'active' : ''
-            }`}
-            aria-haspopup="true"
-            aria-expanded={menuOpen}
-            aria-label="Open menu"
-            onClick={() => setMenuOpen((current) => !current)}
-            title="Menu"
-          >
-            {/* {menuOpen ? <X size={20} /> : <Menu size={20} />} */}
-            <LogoWhite width={20} height={20} />
-          </button>
-          {menuOpen && (
-            <div className="menu-shell sidebar-menu-shell" ref={menuRef}>
-              <div className="menu-list">
-                {menuItems.map((item, index) => {
-                  if (item.type === 'separator') {
-                    return (
-                      <div key={`sep-${index}`} className="menu-separator" />
-                    );
-                  }
-                  const hasSubMenu = item.items && item.items.length > 0;
-                  return (
-                    <div
-                      key={item.id}
-                      className="menu-item-container"
-                      onMouseEnter={() =>
-                        hasSubMenu
-                          ? setActiveMenu(item.id!)
-                          : setActiveMenu(null)
-                      }
-                    >
-                      <button
-                        type="button"
-                        className={`menu-item ${
-                          activeMenu === item.id ? 'active' : ''
-                        }`}
-                        onClick={() => {
-                          if (hasSubMenu) {
-                            setActiveMenu(
-                              activeMenu === item.id ? null : item.id!
-                            );
-                          } else {
-                            onMenuAction(item.id!);
-                            setMenuOpen(false);
-                          }
-                        }}
-                      >
-                        <span>{item.label}</span>
-                        {hasSubMenu && <ChevronRight size={14} />}
-                      </button>
-                      {hasSubMenu && activeMenu === item.id && (
-                        <div className="menu-submenu">
-                          {item.items!.map((subItem) => (
-                            <button
-                              key={subItem.id}
-                              type="button"
-                              className="menu-item"
-                              onClick={() => {
-                                onMenuAction(subItem.id);
-                                setMenuOpen(false);
-                              }}
-                            >
-                              <span>{subItem.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
         {top.map((item) => {
           const Icon = item.icon;
           const active = activePanel === item.id;

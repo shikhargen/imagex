@@ -1,4 +1,4 @@
-import { Menu, SlidersHorizontal, X } from 'lucide-react';
+import { SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ImageXNode, OutputNodeResult } from '../../../../shared/types.js';
 import { nodeMeta } from '../../flow/meta.js';
@@ -50,7 +50,7 @@ export function InspectorPanel({
           <h2>Inspector</h2>
           <p>{node ? ((node.data.title as string) || nodeMeta[node.type].label) : 'No node selected'}</p>
         </div>
-        <button className="icon-button" type="button" aria-label="Close inspector" onClick={onClose}>
+        <button className="ix-close-btn" type="button" aria-label="Close inspector" onClick={onClose}>
           <X size={17} />
         </button>
       </header>
@@ -108,11 +108,16 @@ export function InspectorPanel({
 
 export function InspectorToggle({ onOpen }: { onOpen: () => void }) {
   return (
-    <aside className="inspector-rail">
-      <Button variant="ghost" size="icon" type="button" aria-label="Open inspector" title="Open inspector" onClick={onOpen}>
-        <Menu size={18} />
-      </Button>
-      <span>Inspector</span>
-    </aside>
+    <Button
+      className="inspector-floating-toggle"
+      variant="ghost"
+      size="icon"
+      type="button"
+      aria-label="Open inspector"
+      title="Open inspector"
+      onClick={onOpen}
+    >
+      <SlidersHorizontal size={18} />
+    </Button>
   );
 }

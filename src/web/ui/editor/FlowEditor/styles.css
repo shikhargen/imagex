@@ -61,29 +61,6 @@
   filter: none;
 }
 
-.react-flow__controls {
-  overflow: hidden;
-  border: 1px solid var(--ui-border-subtle);
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-surface);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(12px);
-}
-
-.react-flow__controls-button {
-  width: 1.667rem;
-  height: 1.667rem;
-  border-bottom-color: var(--ui-border-subtle);
-  background: transparent;
-  color: var(--ui-text-muted);
-  transition: all 0.15s;
-}
-
-.react-flow__controls-button:hover {
-  color: var(--ui-text-primary);
-  background: var(--ui-bg-hover);
-}
-
 .react-flow__minimap {
   border: 1px solid var(--ui-border-subtle);
   border-radius: var(--ui-radius-lg);
@@ -100,7 +77,6 @@
   will-change: transform;
 }
 
-.canvas.viewport-zooming .react-flow__controls,
 .canvas.viewport-zooming .react-flow__minimap {
   backdrop-filter: none;
 }
