@@ -45,9 +45,15 @@ export const builtInFieldDefinitions: Record<NodeType, CustomFieldDefinition[]> 
 };
 
 export function fieldDefinitionsFor(node: ImageXNode): CustomFieldDefinition[] {
+  if (node.data.fieldsMode === 'managed') {
+    return Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
+  }
   const builtIn = builtInFieldDefinitions[node.type];
   const dynamic = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
-  return [...builtIn, ...dynamic];
+  const dynamicById = new Map(dynamic.map((field) => [field.id, field]));
+  const overriddenBuiltIns = builtIn.map((field) => dynamicById.get(field.id) || field);
+  const extraFields = dynamic.filter((field) => !builtIn.some((builtInField) => builtInField.id === field.id));
+  return [...overriddenBuiltIns, ...extraFields];
 }
 
 export function editableFieldDefinitionsFor(node: ImageXNode): CustomFieldDefinition[] {

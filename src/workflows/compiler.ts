@@ -163,10 +163,7 @@ function compilePrimitiveNode(node: ImageXNode, context: GraphContext, seen: Set
     ? node.data.title
     : undefined;
 
-  // Get all fields (built-in + dynamic)
-  const builtInFields = getBuiltInFields(node);
-  const dynamicFields = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
-  const allFields = [...builtInFields, ...dynamicFields];
+  const allFields = getNodeFields(node);
 
   const result: Record<string, unknown> = {};
   if (title) result._name = title;
@@ -350,7 +347,10 @@ function nodeMeta(type: string): string {
   return defaultLabels[type] || type;
 }
 
-function getBuiltInFields(node: ImageXNode): CustomFieldDefinition[] {
+function getNodeFields(node: ImageXNode): CustomFieldDefinition[] {
+  const dataFields = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
+  if (node.data.fieldsMode === 'managed') return dataFields;
+
   // Import would be circular, so inline the lookup
   const defs: Record<string, CustomFieldDefinition[]> = {
     prompt: [{ id: 'text', label: 'Text', kind: 'textarea', value: '' }],
@@ -361,7 +361,11 @@ function getBuiltInFields(node: ImageXNode): CustomFieldDefinition[] {
     color: [{ id: 'color', label: 'Color', kind: 'color', value: '#ffffff' }],
     file: [{ id: 'filename', label: 'File', kind: 'text', value: '' }],
   };
-  return defs[node.type] || [];
+  const builtInFields = defs[node.type] || [];
+  const dataFieldsById = new Map(dataFields.map((field) => [field.id, field]));
+  const overriddenBuiltIns = builtInFields.map((field) => dataFieldsById.get(field.id) || field);
+  const extraFields = dataFields.filter((field) => !builtInFields.some((builtInField) => builtInField.id === field.id));
+  return [...overriddenBuiltIns, ...extraFields];
 }
 
 function getFieldValue(node: ImageXNode, field: { id: string; kind: string }): unknown {

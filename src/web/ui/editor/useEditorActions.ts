@@ -15,6 +15,7 @@ import type {
   OutputNodeResult,
 } from '../../../shared/types.js';
 import { createUiWorkflowNode, syncFlowToWorkflow, workflowToFlow } from '../flow/adapters.js';
+import { fieldDefinitionsFor } from '../flow/fields/definitions.js';
 import { nodeMeta } from '../flow/meta.js';
 import type { UiEdge, UiNode } from '../flow/types.js';
 import { flowStore } from '../../state/flowStore.js';
@@ -432,7 +433,8 @@ export function useEditorActions(deps: EditorActionsDeps) {
 
   function updateNodeData(nodeId: string, key: string, value: unknown) {
     recordEditHistory(`${nodeId}:${key}`);
-    const { nodes: nextNodes } = updateNodeWorkflowData(nodesRef.current, nodeId, { [key]: value });
+    const patch = key === 'fields' ? { fields: value, fieldsMode: 'managed' } : { [key]: value };
+    const { nodes: nextNodes } = updateNodeWorkflowData(nodesRef.current, nodeId, patch);
     const nextWorkflow = syncLatestWorkflow(nextNodes, edgesRef.current);
     nodesRef.current = nextNodes;
     if (nextWorkflow) workflowRef.current = nextWorkflow;
@@ -535,12 +537,10 @@ export function useEditorActions(deps: EditorActionsDeps) {
     recordEditHistory(`custom-fields:${nodeId}`);
     const nextNodes = nodesRef.current.map((node) => {
       if (node.id !== nodeId) return node;
-      const fields = Array.isArray(node.data.workflowNode.data.fields)
-        ? (node.data.workflowNode.data.fields as CustomFieldDefinition[])
-        : [];
+      const fields = fieldDefinitionsFor(node.data.workflowNode);
       const workflowNode = {
         ...node.data.workflowNode,
-        data: { ...node.data.workflowNode.data, fields: updater(fields) },
+        data: { ...node.data.workflowNode.data, fields: updater(fields), fieldsMode: 'managed' },
       };
       return { ...node, data: { ...node.data, workflowNode } };
     });

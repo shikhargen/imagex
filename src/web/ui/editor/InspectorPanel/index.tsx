@@ -78,6 +78,7 @@ export function InspectorPanel({
             onAddField={onAddField}
             onDisconnect={onDisconnect}
             onOpenAssets={onOpenAssets}
+            editableFieldStructure
           />
         )
       ) : (

@@ -1,5 +1,5 @@
-import type { CustomFieldDefinition, ImageXNode, NodeType } from '../../../shared/types.js';
-import { builtInFieldDefinitions } from './fields/definitions.js';
+import type { ImageXNode, NodeType } from '../../../shared/types.js';
+import { fieldDefinitionsFor } from './fields/definitions.js';
 
 export type PortKind = 'text' | 'image' | 'result';
 
@@ -62,11 +62,7 @@ export function inputPortsFor(node: ImageXNode): NodePort[] {
   const primitiveTypes: NodeType[] = ['prompt', 'image', 'color', 'file'];
   if (!primitiveTypes.includes(node.type)) return staticPorts;
 
-  const builtIn = builtInFieldDefinitions[node.type] || [];
-  const dynamic = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
-  const allFields = [...builtIn, ...dynamic];
-
-  const fieldPorts: NodePort[] = allFields
+  const fieldPorts: NodePort[] = fieldDefinitionsFor(node)
     .filter((f) => f.kind === 'text' || f.kind === 'textarea' || f.kind === 'image')
     .map((f) => ({
       id: fieldHandleId(f.id),

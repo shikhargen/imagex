@@ -3,7 +3,7 @@ import { Pencil, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import type { CustomFieldDefinition, ImageXNode } from '../../../../../shared/types.js';
 import { FieldControl } from '../../fields/FieldControl.js';
-import { builtInFieldDefinitions, customFieldValue } from '../../fields/definitions.js';
+import { customFieldValue, fieldDefinitionsFor } from '../../fields/definitions.js';
 
 export type NodeFieldsProps = {
   node: ImageXNode;
@@ -26,6 +26,8 @@ export type NodeFieldsProps = {
   onOpenAssets?: ((nodeId: string, fieldId: string) => void) | undefined;
   /** Whether to render React Flow handles (only in node context) */
   renderHandles?: boolean | undefined;
+  /** Whether labels/removal are editable for this field list */
+  editableFieldStructure?: boolean | undefined;
 };
 
 /**
@@ -45,15 +47,16 @@ export function NodeFields({
   onDisconnect,
   onOpenAssets,
   renderHandles,
+  editableFieldStructure,
 }: NodeFieldsProps) {
-  const builtIn = builtInFieldDefinitions[node.type] || [];
-  const dynamicFields = Array.isArray(node.data.fields) ? (node.data.fields as CustomFieldDefinition[]) : [];
-  const allFields = [...builtIn, ...dynamicFields];
+  const allFields = fieldDefinitionsFor(node);
 
   const [renamingFieldId, setRenamingFieldId] = useState<string | null>(null);
 
   const removeField = (fieldId: string) => {
-    const updated = dynamicFields.filter((f) => f.id !== fieldId);
+    const field = allFields.find((candidate) => candidate.id === fieldId);
+    if (!field || !isTextLikeField(field) || !canRemoveField(node, allFields, field)) return;
+    const updated = allFields.filter((f) => f.id !== fieldId);
     onFieldsChange(node.id, updated);
     if (renamingFieldId === fieldId) setRenamingFieldId(null);
   };
@@ -62,11 +65,12 @@ export function NodeFields({
     <>
       <div className="ix-node-fields">
         {allFields.map((field) => {
-          const isDynamic = dynamicFields.some((f) => f.id === field.id);
           const hasSocket = field.kind === 'text' || field.kind === 'textarea' || field.kind === 'image';
           const handleId = `field:${field.id}`;
           const isConnected = connectedHandles.includes(handleId);
           const isRenaming = renamingFieldId === field.id;
+          const canEditStructure = Boolean(editableFieldStructure) && isTextLikeField(field);
+          const canRemove = canEditStructure && canRemoveField(node, allFields, field);
 
           return (
             <div key={field.id} className="ix-primitive-field">
@@ -80,8 +84,8 @@ export function NodeFields({
                 />
               )}
 
-              {/* Hover actions for dynamic fields */}
-              {isDynamic && !isRenaming && !isConnected && (
+              {/* Hover actions for editable fields */}
+              {canEditStructure && !isRenaming && !isConnected && (
                 <div className="ix-field-actions nodrag">
                   <button
                     type="button"
@@ -94,6 +98,7 @@ export function NodeFields({
                     type="button"
                     className="danger"
                     title="Remove"
+                    disabled={!canRemove}
                     onClick={() => removeField(field.id)}
                   >
                     <X size={10} />
@@ -121,16 +126,13 @@ export function NodeFields({
                   field={field}
                   value={customFieldValue(node, field)}
                   onChange={(value) => {
-                    if (isDynamic) {
-                      onDynamicFieldChange?.(node.id, field.id, value);
-                    } else {
-                      onFieldChange(node.id, field.id, value);
-                    }
+                    if (onDynamicFieldChange) onDynamicFieldChange(node.id, field.id, value);
+                    else onFieldChange(node.id, field.id, value);
                   }}
-                  onCommit={!isDynamic && onFieldCommit ? (value) => onFieldCommit(node.id, field.id, value) : undefined}
+                  onCommit={onFieldCommit ? (value) => onFieldCommit(node.id, field.id, value) : undefined}
                   labelEditing={isRenaming}
                   onLabelCommit={(newLabel) => {
-                    const updated = dynamicFields.map((f) =>
+                    const updated = allFields.map((f) =>
                       f.id === field.id ? { ...f, label: newLabel } : f
                     );
                     onFieldsChange(node.id, updated);
@@ -169,4 +171,14 @@ export function NodeFields({
       )}
     </>
   );
+}
+
+function canRemoveField(node: ImageXNode, fields: CustomFieldDefinition[], field: CustomFieldDefinition): boolean {
+  if (node.type !== 'prompt' || !isTextLikeField(field)) return true;
+  const promptTextFields = fields.filter(isTextLikeField);
+  return promptTextFields.length > 1;
+}
+
+function isTextLikeField(field: CustomFieldDefinition): boolean {
+  return field.kind === 'text' || field.kind === 'textarea';
 }

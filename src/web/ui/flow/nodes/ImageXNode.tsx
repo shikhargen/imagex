@@ -123,6 +123,7 @@ function PrimitiveNode({
         onFieldsChange={(nodeId, fields) => data.onChange(nodeId, 'fields', fields)}
         onAddField={(nodeId, kind) => data.onAddCustomField?.(nodeId, kind)}
         onOpenAssets={(nodeId, fieldId) => data.onOpenAssetPicker?.(nodeId, fieldId)}
+        editableFieldStructure
         renderHandles
       />
     </BaseNode>
