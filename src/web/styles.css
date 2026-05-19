@@ -271,7 +271,7 @@ button {
   left: var(--top-bar-gap);
   width: var(--top-bar-height);
   height: var(--top-bar-height);
-  z-index: 40;
+  z-index: 50;
   display: grid;
   place-items: center;
   padding: 0;
