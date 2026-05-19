@@ -1,6 +1,6 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
 import { MoreHorizontal } from 'lucide-react';
-import { useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { nodeMeta } from '../meta.js';
 import { inputPortsFor, outputImageIndexFromHandle, outputPortsFor } from '../ports.js';
 import type { UiNodeData } from '../types.js';
@@ -24,9 +24,19 @@ export function BaseNode({ data, selected, showIcon, centeredHandles, renamable,
   const title = (node.data.title as string) || meta.label;
   const inputs = inputPortsFor(node);
   const outputs = outputPortsFor(node);
+  const updateNodeInternals = useUpdateNodeInternals();
+  const handleSignature = [
+    ...inputs.map((port) => `in:${port.id}`),
+    ...outputs.map((port, index) => `out:${port.id}:${outputHandleTop(index, outputs.length)}`),
+  ].join('|');
 
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(title);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => updateNodeInternals(node.id));
+    return () => window.cancelAnimationFrame(frame);
+  }, [handleSignature, node.id, updateNodeInternals]);
 
   const onMenu = (event: MouseEvent) => {
     event.preventDefault();
