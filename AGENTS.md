@@ -62,6 +62,8 @@ Gitignored local notes may exist. Treat them as private context only; do not quo
 - Image-editing nodes pass image references through the compiler; actual transforms are applied by the frontend preview path and mirrored on the daemon before generation. Edit nodes process one image input, so reconnecting `image-in` replaces the old edge.
 - Each `codex-output` node corresponds to one generation target. Output dependencies must run in topological order, independent topo levels may run in parallel, circular output dependencies must be detected, and generated images remain individually addressable through `result-out` / `result-out:<index>` handles.
 - Dynamic output image handles must not leave orphaned edges when previews are cleared or regenerated. Duplicated output nodes may keep their previous preview, but connecting or reconnecting a new input into an output node must clear stale output generation state.
+- The asset library has three asset classes: imported image assets, reusable node assets, and generated output assets flattened from durable run history. Deleting or renaming image/output assets must reconcile any current workflow nodes that reference their `assetId` or `assetUrl`.
+- Node assets are reusable workflow snippets with `schemaVersion: 1`. The root must be a non-frame node; frames may be included only as containers. Save and insert paths must strip transient UI state, output generation state, stale generated-output references, and non-internal edges while preserving relative node positions and valid imported asset references.
 
 ## Generation Architecture
 
@@ -78,6 +80,7 @@ Gitignored local notes may exist. Treat them as private context only; do not quo
 - `/api/projects/:projectId/generate-status` is the recovery source of truth after refresh or daemon restart. If a persisted job is still marked running but no active in-memory job exists, reconcile it to `partial` or `error` based on saved images.
 - `/api/projects/:projectId/generate/cancel` aborts the active provider requests and persists partial output state. UI cancel controls should call this endpoint before clearing local state.
 - Do not reintroduce client-only polling as the source of truth for generation progress. Stream events and polling should both apply the same `GenerationJobStatus` shape.
+- `/api/projects/:projectId/output-assets` exposes generated output images as a flattened asset list. Rename/delete operations update the durable run `job.json` and `outputs/runs/index.json`; delete also removes the generated file when it is still under the project outputs root.
 - Project output file-serving supports nested `outputs/runs/...` paths and must preserve path traversal checks.
 
 ## Product And UX Direction

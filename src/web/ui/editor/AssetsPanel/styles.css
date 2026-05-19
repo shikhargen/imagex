@@ -60,6 +60,30 @@
   white-space: nowrap;
 }
 
+.asset-picker-tabs {
+  display: flex;
+  gap: var(--ui-space-2);
+  padding: 0 var(--ui-space-3) var(--ui-space-3);
+}
+
+.asset-picker-tabs button {
+  flex: 1;
+  height: 2rem;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-md);
+  background: transparent;
+  color: var(--ui-text-dim);
+  font-size: var(--ui-text-sm);
+  cursor: pointer;
+}
+
+.asset-picker-tabs button:hover,
+.asset-picker-tabs button.active {
+  border-color: var(--ui-border-default);
+  background: var(--ui-bg-hover);
+  color: var(--ui-text-primary);
+}
+
 .asset-node-list-compact {
   display: grid;
   align-content: start;

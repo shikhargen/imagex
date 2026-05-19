@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import type {
   GenerationJobStatus,
+  OutputNodeGenerationState,
   ImageXAsset,
   ImageXEdge,
   ImageXNode,
   ImageXNodeAsset,
+  ImageXOutputAsset,
   ImageXProject,
   ImageXProjectSummary,
   ImageXTemplateSummary,
@@ -73,6 +75,7 @@ export function useProjectActions(deps: ProjectActionsDeps) {
   const [projects, setProjects] = useState<ImageXProjectSummary[]>([]);
   const [templates, setTemplates] = useState<ImageXTemplateSummary[]>([]);
   const [assets, setAssets] = useState<ImageXAsset[]>([]);
+  const [outputAssets, setOutputAssets] = useState<ImageXOutputAsset[]>([]);
   const [nodeAssets, setNodeAssets] = useState<ImageXNodeAsset[]>([]);
 
   // ─── Internal helpers ──────────────────────────────────────────────────────
@@ -93,6 +96,7 @@ export function useProjectActions(deps: ProjectActionsDeps) {
     setProject(nextProject);
     loadWorkflow(nextProject.workflow, nextProject.workflow.nodes[0]?.id ?? null);
     void refreshAssets(nextProject.metadata.id);
+    void refreshOutputAssets(nextProject.metadata.id);
     void refreshNodeAssets(nextProject.metadata.id);
     setOutputResults(new Map());
     setStatus('Ready');
@@ -151,21 +155,35 @@ export function useProjectActions(deps: ProjectActionsDeps) {
     } else if (data.results?.length) {
       const totalImages = data.results.reduce((sum, result) => sum + result.images.length, 0);
       setStatus(`Generated ${totalImages} image${totalImages === 1 ? '' : 's'}`);
+      void refreshOutputAssets();
     }
   }
 
   function nodeAssetPayload(rootNodeId: string): { rootNodeId: string; nodes: ImageXNode[]; edges: ImageXEdge[] } | null {
-    const root = nodesRef.current.find((node) => node.id === rootNodeId);
+    const selectedIds = new Set(nodesRef.current.filter((node) => node.selected).map((node) => node.id));
+    const selectionMode = rootNodeId === '__selection__';
+    const root = selectionMode
+      ? nodesRef.current.find((node) => selectedIds.has(node.id) && node.type !== 'frame')
+      : nodesRef.current.find((node) => node.id === rootNodeId);
     if (!root) return null;
-    const included = new Set<string>([rootNodeId]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const edge of edgesRef.current) {
-        if (!edge.target || !edge.source) continue;
-        if (included.has(edge.target) && !included.has(edge.source)) {
-          included.add(edge.source);
-          changed = true;
+    const included = selectionMode ? new Set(selectedIds) : new Set<string>([root.id]);
+    if (selectionMode) {
+      for (const node of nodesRef.current) {
+        if (node.type !== 'frame') continue;
+        if (nodesRef.current.some((candidate) => included.has(candidate.id) && candidate.data.workflowNode.data.frameId === node.id)) {
+          included.add(node.id);
+        }
+      }
+    } else {
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const edge of edgesRef.current) {
+          if (!edge.target || !edge.source) continue;
+          if (included.has(edge.target) && !included.has(edge.source)) {
+            included.add(edge.source);
+            changed = true;
+          }
         }
       }
     }
@@ -180,7 +198,7 @@ export function useProjectActions(deps: ProjectActionsDeps) {
         if (edge.targetHandle) nextEdge.targetHandle = edge.targetHandle;
         return nextEdge;
       });
-    return { rootNodeId, nodes, edges };
+    return { rootNodeId: root.id, nodes, edges };
   }
 
   // ─── Bootstrap ─────────────────────────────────────────────────────────────
@@ -397,6 +415,14 @@ export function useProjectActions(deps: ProjectActionsDeps) {
     setNodeAssets(data.assets);
   }
 
+  async function refreshOutputAssets(projectId = project?.metadata.id) {
+    if (!projectId) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/output-assets`);
+    if (!response.ok) return;
+    const data = (await response.json()) as { assets: ImageXOutputAsset[] };
+    setOutputAssets(data.assets);
+  }
+
   async function importAssets(files: FileList | null) {
     if (!project || !files?.length) return;
     let nextAssets = assets;
@@ -434,27 +460,213 @@ export function useProjectActions(deps: ProjectActionsDeps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     });
-    if (response.ok) setAssets(((await response.json()) as { assets: ImageXAsset[] }).assets);
+    if (!response.ok) return;
+    const data = (await response.json()) as { assets: ImageXAsset[] };
+    setAssets(data.assets);
+    const renamed = data.assets.find((asset) => asset.id === assetId);
+    if (renamed) reflectRenamedAsset(renamed);
   }
 
   async function deleteAsset(assetId: string) {
     if (!project) return;
+    const deleted = assets.find((candidate) => candidate.id === assetId);
     const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/assets/${encodeURIComponent(assetId)}`, {
       method: 'DELETE',
     });
-    if (response.ok) setAssets(((await response.json()) as { assets: ImageXAsset[] }).assets);
+    if (!response.ok) return;
+    setAssets(((await response.json()) as { assets: ImageXAsset[] }).assets);
+    if (deleted) scrubDeletedImageAsset(deleted);
+  }
+
+  function renameOutputAsset(assetId: string) {
+    const asset = outputAssets.find((candidate) => candidate.id === assetId);
+    setTextDialog({
+      type: 'rename-output-asset',
+      id: assetId,
+      title: 'Rename output',
+      label: 'Name',
+      initialValue: asset?.name || 'Output',
+    });
+  }
+
+  async function submitRenameOutputAsset(assetId: string, name: string) {
+    if (!project) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/output-assets/${encodeURIComponent(assetId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!response.ok) return;
+    const data = (await response.json()) as { assets: ImageXOutputAsset[] };
+    setOutputAssets(data.assets);
+    const renamed = data.assets.find((asset) => asset.id === assetId);
+    if (renamed) reflectRenamedOutputAsset(renamed);
+  }
+
+  async function deleteOutputAsset(assetId: string) {
+    if (!project) return;
+    const deleted = outputAssets.find((candidate) => candidate.id === assetId);
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/output-assets/${encodeURIComponent(assetId)}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) return;
+    const data = (await response.json()) as { assets: ImageXOutputAsset[]; deletedUrl?: string };
+    setOutputAssets(data.assets);
+    if (deleted) scrubDeletedOutputAsset(deleted);
+  }
+
+  function renameNodeAsset(assetId: string) {
+    const asset = nodeAssets.find((candidate) => candidate.id === assetId);
+    setTextDialog({
+      type: 'rename-node-asset',
+      id: assetId,
+      title: 'Rename node asset',
+      label: 'Name',
+      initialValue: asset?.name || 'Node asset',
+    });
+  }
+
+  async function submitRenameNodeAsset(assetId: string, name: string) {
+    if (!project) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/node-assets/${encodeURIComponent(assetId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (response.ok) setNodeAssets(((await response.json()) as { assets: ImageXNodeAsset[] }).assets);
+  }
+
+  async function deleteNodeAsset(assetId: string) {
+    if (!project) return;
+    const response = await fetch(`/api/projects/${encodeURIComponent(project.metadata.id)}/node-assets/${encodeURIComponent(assetId)}`, {
+      method: 'DELETE',
+    });
+    if (response.ok) setNodeAssets(((await response.json()) as { assets: ImageXNodeAsset[] }).assets);
+  }
+
+  function scrubDeletedImageAsset(asset: ImageXAsset) {
+    const current = syncLatestWorkflow();
+    if (!current) return;
+    let changed = false;
+    const nodes = current.nodes.map((node) => {
+      const usesAsset = node.data.assetId === asset.id || node.data.assetUrl === asset.url;
+      if (!usesAsset) return node;
+      changed = true;
+      const nextData = { ...node.data };
+      delete nextData.assetId;
+      delete nextData.assetUrl;
+      delete nextData.assetName;
+      for (const [key, value] of Object.entries(nextData)) {
+        if (value === asset.file || value === asset.name || value === asset.url) nextData[key] = '';
+      }
+      return { ...node, data: nextData };
+    });
+    if (!changed) return;
+    recordHistory();
+    applyWorkflow({ ...current, nodes, updatedAt: new Date().toISOString() });
+  }
+
+  function reflectRenamedAsset(asset: ImageXAsset) {
+    const current = syncLatestWorkflow();
+    if (!current) return;
+    let changed = false;
+    const nodes = current.nodes.map((node) => {
+      if (node.data.assetId !== asset.id && node.data.assetUrl !== asset.url) return node;
+      changed = true;
+      return { ...node, data: { ...node.data, assetName: asset.name } };
+    });
+    if (!changed) return;
+    recordHistory();
+    applyWorkflow({ ...current, nodes, updatedAt: new Date().toISOString() });
+  }
+
+  function reflectRenamedOutputAsset(asset: ImageXOutputAsset) {
+    const current = syncLatestWorkflow();
+    if (!current) return;
+    let changed = false;
+    const nodes = current.nodes.map((node) => {
+      if (node.data.assetId !== asset.id && node.data.assetUrl !== asset.url) return node;
+      changed = true;
+      return { ...node, data: { ...node.data, assetName: asset.name } };
+    });
+    if (!changed) return;
+    recordHistory();
+    applyWorkflow({ ...current, nodes, updatedAt: new Date().toISOString() });
+  }
+
+  function scrubDeletedOutputAsset(asset: ImageXOutputAsset) {
+    const current = syncLatestWorkflow();
+    if (!current) return;
+    let changed = false;
+    const sourceNode = current.nodes.find((node) => node.id === asset.outputNodeId);
+    const sourceUrls = Array.isArray(sourceNode?.data.previewUrls) ? sourceNode.data.previewUrls : [];
+    const currentImageIndex = sourceUrls.findIndex((url) => url === asset.url);
+    const deletedImageIndex = currentImageIndex >= 0 ? currentImageIndex : asset.imageIndex;
+    const nodes = current.nodes.map((node) => {
+      const data = node.data;
+      if (node.id === asset.outputNodeId) {
+        const previewUrls = Array.isArray(data.previewUrls) ? data.previewUrls.filter((url) => url !== asset.url) : [];
+        const generation = generationWithDeletedUrl(data.generation, asset.url);
+        changed = changed || previewUrls.length !== (Array.isArray(data.previewUrls) ? data.previewUrls.length : 0) || generation !== data.generation;
+        return {
+          ...node,
+          data: {
+            ...data,
+            previewUrl: previewUrls[0] || '',
+            previewUrls,
+            previewIndex: Math.min(Number(data.previewIndex) || 0, Math.max(0, previewUrls.length - 1)),
+            ...(generation ? { generation } : {}),
+          },
+        };
+      }
+
+      if (data.assetUrl === asset.url) {
+        changed = true;
+        const nextData = { ...data };
+        delete nextData.assetId;
+        delete nextData.assetUrl;
+        delete nextData.assetName;
+        for (const [key, value] of Object.entries(nextData)) {
+          if (value === asset.url || value === asset.name) nextData[key] = '';
+        }
+        return { ...node, data: nextData };
+      }
+
+      return node;
+    });
+
+    const edges = current.edges.flatMap((edge) => {
+      if (edge.source !== asset.outputNodeId) return [edge];
+      const sourceIndex = outputIndexFromHandle(edge.sourceHandle);
+      if (sourceIndex === deletedImageIndex) {
+        changed = true;
+        return [];
+      }
+      if (sourceIndex > deletedImageIndex) {
+        changed = true;
+        return [{ ...edge, sourceHandle: outputHandleForIndex(sourceIndex - 1), id: `${edge.source}-${outputHandleForIndex(sourceIndex - 1)}-${edge.target}-${edge.targetHandle || 'in'}` }];
+      }
+      return [edge];
+    });
+
+    if (!changed) return;
+    recordHistory();
+    applyWorkflow({ ...current, nodes, edges, updatedAt: new Date().toISOString() });
   }
 
   // ─── Node assets ───────────────────────────────────────────────────────────
 
   function openCreateNodeAssetDialog(nodeId: string) {
-    const node = nodesRef.current.find((candidate) => candidate.id === nodeId)?.data.workflowNode;
-    if (!node || node.type === 'frame') return;
-    const meta = nodeMeta[node.type];
+    const payload = nodeAssetPayload(nodeId);
+    const root = payload?.nodes.find((candidate) => candidate.id === payload.rootNodeId);
+    if (!payload || !root || root.type === 'frame') return;
+    const meta = nodeMeta[root.type];
     const defaultName =
-      (typeof node.data.name === 'string' && node.data.name.trim()) ||
-      (typeof node.data.title === 'string' && node.data.title.trim()) ||
-      meta.label;
+      nodeId === '__selection__'
+        ? `${meta.label} snippet`
+        : (typeof root.data.name === 'string' && root.data.name.trim()) ||
+          (typeof root.data.title === 'string' && root.data.title.trim()) ||
+          meta.label;
     setTextDialog({
       type: 'create-node-asset',
       id: nodeId,
@@ -486,10 +698,12 @@ export function useProjectActions(deps: ProjectActionsDeps) {
     projects,
     templates,
     assets,
+    outputAssets,
     nodeAssets,
     bootstrap,
     refreshProjects,
     refreshAssets,
+    refreshOutputAssets,
     refreshNodeAssets,
     openProject,
     closeProject,
@@ -501,6 +715,12 @@ export function useProjectActions(deps: ProjectActionsDeps) {
     renameAsset,
     submitRenameAsset,
     deleteAsset,
+    renameOutputAsset,
+    submitRenameOutputAsset,
+    deleteOutputAsset,
+    renameNodeAsset,
+    submitRenameNodeAsset,
+    deleteNodeAsset,
     renameWorkflowFromMenu,
     submitRenameWorkflow,
     renameProjectFromMenu,
@@ -510,4 +730,30 @@ export function useProjectActions(deps: ProjectActionsDeps) {
     openCreateNodeAssetDialog,
     createNodeAssetFromNode,
   };
+}
+
+function generationWithDeletedUrl(value: unknown, url: string): OutputNodeGenerationState | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const generation = value as OutputNodeGenerationState;
+  if (!Array.isArray(generation.images)) return undefined;
+  const images = generation.images.filter((image) => image.url !== url);
+  if (images.length === generation.images.length) return generation;
+  return {
+    ...generation,
+    images,
+    status: images.length ? generation.status : 'cancelled',
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function outputIndexFromHandle(handleId: string | undefined): number {
+  if (!handleId || handleId === 'result-out') return 0;
+  const match = handleId.match(/^result-out:(\d+)$/);
+  if (!match) return 0;
+  const index = Number(match[1]);
+  return Number.isInteger(index) && index >= 0 ? index : 0;
+}
+
+function outputHandleForIndex(index: number): string {
+  return index <= 0 ? 'result-out' : `result-out:${index}`;
 }

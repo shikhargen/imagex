@@ -142,10 +142,26 @@ export type ImageXAsset = {
   updatedAt: string;
 };
 
+export type ImageXOutputAsset = {
+  id: string;
+  name: string;
+  type: 'output';
+  jobId: string;
+  outputNodeId: string;
+  imageId: string;
+  imageIndex: number;
+  url: string;
+  path: string;
+  prompt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ImageXNodeAsset = {
   id: string;
   name: string;
   type: 'node';
+  schemaVersion: 1;
   nodeType: NodeType;
   rootNodeId: string;
   nodes: ImageXNode[];
@@ -153,6 +169,8 @@ export type ImageXNodeAsset = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type ImageXAssetKind = 'image' | 'output' | 'node';
 
 // ─── Generation ──────────────────────────────────────────────────────────────
 export type ImageReference = {
@@ -186,6 +204,7 @@ export type GeneratedImage = {
   id: string;
   path: string;
   url: string;
+  name?: string;
   revisedPrompt?: string;
 };
 

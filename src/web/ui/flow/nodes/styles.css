@@ -254,6 +254,7 @@
   align-items: center;
   gap: 0.375rem;
   padding: 0.5rem;
+  padding-right: 3rem;
   border: 1px solid var(--ui-border-subtle);
   border-radius: var(--ui-radius-lg);
   background: var(--ui-bg-panel);
@@ -284,6 +285,17 @@
   font-weight: 500;
   line-height: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ix-field-connected-label-edit {
+  all: unset;
+  min-width: 0;
+  flex: 1;
+  color: var(--ui-text-primary);
+  caret-color: var(--node-accent);
 }
 
 .ix-field {

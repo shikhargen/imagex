@@ -18,10 +18,14 @@ export type FloatingMenu =
   | { type: 'workflow'; workflowId: string; x: number; y: number }
   | { type: 'project'; projectId: string; x: number; y: number }
   | { type: 'asset'; assetId: string; x: number; y: number }
+  | { type: 'output-asset'; assetId: string; x: number; y: number }
+  | { type: 'node-asset'; assetId: string; x: number; y: number }
   | null;
 
 export type TextDialogState =
   | { type: 'rename-asset'; id: string; title: string; label: string; initialValue: string }
+  | { type: 'rename-output-asset'; id: string; title: string; label: string; initialValue: string }
+  | { type: 'rename-node-asset'; id: string; title: string; label: string; initialValue: string }
   | { type: 'rename-workflow'; id: string; title: string; label: string; initialValue: string }
   | { type: 'rename-project'; id: string; title: string; label: string; initialValue: string }
   | { type: 'create-node-asset'; id: string; title: string; label: string; initialValue: string }

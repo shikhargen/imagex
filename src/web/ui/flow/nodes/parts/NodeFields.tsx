@@ -1,6 +1,6 @@
 import { Handle, Position } from '@xyflow/react';
 import { Pencil, Plus, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CustomFieldDefinition, ImageXNode } from '../../../../../shared/types.js';
 import { FieldControl } from '../../fields/FieldControl.js';
 import { customFieldValue, fieldDefinitionsFor } from '../../fields/definitions.js';
@@ -53,9 +53,21 @@ export function NodeFields({
 
   const [renamingFieldId, setRenamingFieldId] = useState<string | null>(null);
 
-  const removeField = (fieldId: string) => {
+  const renameField = (fieldId: string, label: string) => {
+    const nextLabel = label.trim();
+    const field = allFields.find((candidate) => candidate.id === fieldId);
+    if (!field) return;
+    const updated = allFields.map((candidate) =>
+      candidate.id === fieldId ? { ...candidate, label: nextLabel || field.label } : candidate
+    );
+    onFieldsChange(node.id, updated);
+    setRenamingFieldId(null);
+  };
+
+  const removeField = (fieldId: string, handleId?: string, isConnected?: boolean) => {
     const field = allFields.find((candidate) => candidate.id === fieldId);
     if (!field || !isTextLikeField(field) || !canRemoveField(node, allFields, field)) return;
+    if (isConnected && handleId) onDisconnect?.(node.id, handleId);
     const updated = allFields.filter((f) => f.id !== fieldId);
     onFieldsChange(node.id, updated);
     if (renamingFieldId === fieldId) setRenamingFieldId(null);
@@ -85,7 +97,7 @@ export function NodeFields({
               )}
 
               {/* Hover actions for editable fields */}
-              {canEditStructure && !isRenaming && !isConnected && (
+              {canEditStructure && !isRenaming && (
                 <div className="ix-field-actions nodrag">
                   <button
                     type="button"
@@ -99,7 +111,7 @@ export function NodeFields({
                     className="danger"
                     title="Remove"
                     disabled={!canRemove}
-                    onClick={() => removeField(field.id)}
+                    onClick={() => removeField(field.id, handleId, isConnected)}
                   >
                     <X size={10} />
                   </button>
@@ -119,7 +131,15 @@ export function NodeFields({
                       <X size={10} />
                     </button>
                   )}
-                  <span className="ix-field-connected-label">{field.label}</span>
+                  {isRenaming ? (
+                    <ConnectedFieldLabelEditor
+                      value={field.label}
+                      onCommit={(newLabel) => renameField(field.id, newLabel)}
+                      onCancel={() => setRenamingFieldId(null)}
+                    />
+                  ) : (
+                    <span className="ix-field-connected-label">{field.label}</span>
+                  )}
                 </div>
               ) : (
                 <FieldControl
@@ -131,13 +151,7 @@ export function NodeFields({
                   }}
                   onCommit={onFieldCommit ? (value) => onFieldCommit(node.id, field.id, value) : undefined}
                   labelEditing={isRenaming}
-                  onLabelCommit={(newLabel) => {
-                    const updated = allFields.map((f) =>
-                      f.id === field.id ? { ...f, label: newLabel } : f
-                    );
-                    onFieldsChange(node.id, updated);
-                    setRenamingFieldId(null);
-                  }}
+                  onLabelCommit={(newLabel) => renameField(field.id, newLabel)}
                   onOpenAssets={
                     hasAssetPicker && (field.id === 'image' || field.kind === 'image')
                       ? () => onOpenAssets?.(node.id, field.id)
@@ -181,4 +195,42 @@ function canRemoveField(node: ImageXNode, fields: CustomFieldDefinition[], field
 
 function isTextLikeField(field: CustomFieldDefinition): boolean {
   return field.kind === 'text' || field.kind === 'textarea';
+}
+
+function ConnectedFieldLabelEditor({
+  value,
+  onCommit,
+  onCancel,
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  return (
+    <input
+      ref={inputRef}
+      className="ix-field-connected-label ix-field-connected-label-edit nodrag"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => onCommit(draft)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          onCommit(draft);
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onCancel();
+        }
+      }}
+    />
+  );
 }

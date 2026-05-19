@@ -169,21 +169,43 @@ export async function createProjectNodeAsset(
 ): Promise<ImageXNodeAsset[]> {
   const project = await getProject(projectId);
   const assets = await readNodeAssetsManifest(project.metadata);
-  const root = input.nodes.find((node) => node.id === input.rootNodeId) || input.nodes[0];
+  const projectAssets = await readAssetsManifest(project.metadata);
+  const sanitized = sanitizeNodeAssetPayload(input, new Set(projectAssets.map((asset) => asset.id)));
+  const root = sanitized.nodes.find((node) => node.id === sanitized.rootNodeId) || sanitized.nodes[0];
   if (!root) throw new Error('Node asset requires at least one node.');
   const now = new Date().toISOString();
   const asset: ImageXNodeAsset = {
     id: `node-asset-${randomUUID().slice(0, 10)}`,
     name: input.name.trim() || root.type,
     type: 'node',
+    schemaVersion: 1,
     nodeType: root.type,
     rootNodeId: root.id,
-    nodes: input.nodes,
-    edges: input.edges,
+    nodes: sanitized.nodes,
+    edges: sanitized.edges,
     createdAt: now,
     updatedAt: now,
   };
   const nextAssets = [...assets, asset];
+  await writeNodeAssetsManifest(project.metadata, nextAssets);
+  return nextAssets;
+}
+
+export async function renameProjectNodeAsset(projectId: string, assetId: string, name: string): Promise<ImageXNodeAsset[]> {
+  const project = await getProject(projectId);
+  const assets = await readNodeAssetsManifest(project.metadata);
+  const now = new Date().toISOString();
+  const nextAssets = assets.map((asset) =>
+    asset.id === assetId ? { ...asset, name: name.trim() || asset.name, updatedAt: now } : asset
+  );
+  await writeNodeAssetsManifest(project.metadata, nextAssets);
+  return nextAssets;
+}
+
+export async function deleteProjectNodeAsset(projectId: string, assetId: string): Promise<ImageXNodeAsset[]> {
+  const project = await getProject(projectId);
+  const assets = await readNodeAssetsManifest(project.metadata);
+  const nextAssets = assets.filter((asset) => asset.id !== assetId);
   await writeNodeAssetsManifest(project.metadata, nextAssets);
   return nextAssets;
 }
@@ -289,6 +311,85 @@ function workflowForTemplate(templateId: string | undefined, title: string): Ima
   };
 }
 
+const NODE_TYPES = new Set(['prompt', 'image', 'color', 'file', 'codex-output', 'color-balance', 'rotate-flip', 'crop', 'blur', 'download', 'frame']);
+
+function sanitizeNodeAssetPayload(
+  input: { rootNodeId: string; nodes: ImageXNode[]; edges: ImageXEdge[] },
+  validAssetIds: Set<string>,
+): { rootNodeId: string; nodes: ImageXNode[]; edges: ImageXEdge[] } {
+  const rawNodes = Array.isArray(input.nodes) ? input.nodes : [];
+  const seen = new Set<string>();
+  const nodes = rawNodes
+    .filter((node) => node && typeof node.id === 'string' && NODE_TYPES.has(node.type) && !seen.has(node.id) && (seen.add(node.id), true))
+    .map((node) => sanitizeNodeAssetNode(node, validAssetIds));
+
+  const firstNonFrame = nodes.find((node) => node.type !== 'frame');
+  if (!firstNonFrame) throw new Error('Node asset requires at least one non-frame node.');
+  const rootNodeId = nodes.some((node) => node.id === input.rootNodeId && node.type !== 'frame') ? input.rootNodeId : firstNonFrame.id;
+  const edges = sanitizeNodeAssetEdges(Array.isArray(input.edges) ? input.edges : [], nodes);
+  return { rootNodeId, nodes, edges };
+}
+
+function sanitizeNodeAssetNode(node: ImageXNode, validAssetIds?: Set<string>): ImageXNode {
+  const data = { ...node.data };
+  delete data.isDropTargetFrame;
+  if (node.type === 'codex-output') {
+    delete data.previewUrl;
+    delete data.previewUrls;
+    delete data.previewIndex;
+    delete data.generating;
+    delete data.generation;
+  }
+
+  const assetId = typeof data.assetId === 'string' ? data.assetId : '';
+  const assetUrl = typeof data.assetUrl === 'string' ? data.assetUrl : '';
+  const shouldDropAsset =
+    assetUrl.includes('/outputs/runs/') ||
+    (validAssetIds && assetId && !validAssetIds.has(assetId));
+  if (shouldDropAsset) {
+    delete data.assetId;
+    delete data.assetUrl;
+    delete data.assetName;
+    for (const [key, value] of Object.entries(data)) {
+      if (value === assetUrl) data[key] = '';
+    }
+  }
+
+  const next: ImageXNode = {
+    id: node.id,
+    type: node.type,
+    position: {
+      x: Number.isFinite(node.position?.x) ? node.position.x : 0,
+      y: Number.isFinite(node.position?.y) ? node.position.y : 0,
+    },
+    data,
+  };
+  return next;
+}
+
+function sanitizeNodeAssetEdges(edges: ImageXEdge[], nodes: ImageXNode[]): ImageXEdge[] {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const seen = new Set<string>();
+  return edges
+    .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target) && edge.source !== edge.target)
+    .map((edge) => {
+      const next: ImageXEdge = {
+        id: edge.id || `${edge.source}-${edge.sourceHandle || 'out'}-${edge.target}-${edge.targetHandle || 'in'}`,
+        source: edge.source,
+        target: edge.target,
+      };
+      if (edge.sourceHandle) next.sourceHandle = edge.sourceHandle;
+      if (edge.targetHandle) next.targetHandle = edge.targetHandle;
+      return next;
+    })
+    .filter((edge) => {
+      const key = `${edge.source}:${edge.sourceHandle || ''}->${edge.target}:${edge.targetHandle || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 async function readAssetsManifest(metadata: ImageXProjectMetadata): Promise<ImageXAsset[]> {
   const manifestPath = join(projectDir(metadata.id), metadata.assetsDir, assetsManifestFile);
   const raw = await readFile(manifestPath, 'utf8').catch(() => '[]');
@@ -305,7 +406,19 @@ async function readNodeAssetsManifest(metadata: ImageXProjectMetadata): Promise<
   const manifestPath = join(projectDir(metadata.id), metadata.assetsDir, nodeAssetsManifestFile);
   const raw = await readFile(manifestPath, 'utf8').catch(() => '[]');
   const assets = JSON.parse(raw) as ImageXNodeAsset[];
-  return Array.isArray(assets) ? assets : [];
+  return Array.isArray(assets)
+    ? assets
+        .map((asset) => {
+          const nodes = Array.isArray(asset.nodes) ? asset.nodes.map((node) => sanitizeNodeAssetNode(node)) : [];
+          return {
+            ...asset,
+            schemaVersion: 1 as const,
+            nodes,
+            edges: Array.isArray(asset.edges) ? sanitizeNodeAssetEdges(asset.edges, nodes) : [],
+          };
+        })
+        .filter((asset) => asset.nodes.length > 0)
+    : [];
 }
 
 function assetUrl(projectId: string, assetId: string): string {

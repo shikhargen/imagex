@@ -1,7 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +28,7 @@ import type {
   GenerationRunMode,
   ImageXEdge,
   ImageXNode,
+  ImageXOutputAsset,
   ImageXWorkflow,
   OutputNodeGenerationState,
   OutputNodeResult,
@@ -41,6 +42,7 @@ import {
   deleteProjectWorkflow,
   deleteProject,
   deleteProjectAsset,
+  deleteProjectNodeAsset,
   getProject,
   importProjectAsset,
   loadProjectWorkflow,
@@ -52,6 +54,7 @@ import {
   projectAssetPath,
   projectOutputDir,
   renameProjectAsset,
+  renameProjectNodeAsset,
   renameProject,
   saveProjectWorkflow,
   type CreateProjectInput,
@@ -315,6 +318,102 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     return payload;
   }
 
+  function outputAssetId(jobId: string, outputNodeId: string, imageId: string): string {
+    return [jobId, outputNodeId, imageId].map((part) => encodeURIComponent(part)).join('~');
+  }
+
+  function parseOutputAssetId(assetId: string): { jobId: string; outputNodeId: string; imageId: string } {
+    const [jobId, outputNodeId, imageId] = assetId.split('~').map((part) => decodeURIComponent(part || ''));
+    if (!jobId || !outputNodeId || !imageId) throw new Error('Invalid output asset id.');
+    return { jobId, outputNodeId, imageId };
+  }
+
+  function outputAssetFromImage(
+    job: DurableGenerationJob,
+    outputNodeId: string,
+    state: OutputNodeGenerationState,
+    image: GeneratedImage,
+    imageIndex: number,
+  ): ImageXOutputAsset {
+    return {
+      id: outputAssetId(job.id, outputNodeId, image.id),
+      name: image.name || `Output ${imageIndex + 1}`,
+      type: 'output',
+      jobId: job.id,
+      outputNodeId,
+      imageId: image.id,
+      imageIndex,
+      url: image.url,
+      path: image.path,
+      ...(state.prompt ? { prompt: state.prompt } : {}),
+      createdAt: job.createdAt,
+      updatedAt: state.updatedAt || job.updatedAt,
+    };
+  }
+
+  async function listProjectOutputAssets(projectId: string): Promise<ImageXOutputAsset[]> {
+    const jobs = await readGenerationJobs(projectId);
+    const assets: ImageXOutputAsset[] = [];
+    for (const job of jobs) {
+      for (const [outputNodeId, state] of Object.entries(job.outputs || {})) {
+        state.images.forEach((image, index) => {
+          if (image?.url && image?.path) assets.push(outputAssetFromImage(job, outputNodeId, state, image, index));
+        });
+      }
+    }
+    return assets.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
+
+  async function updateOutputAsset(
+    projectId: string,
+    assetId: string,
+    updater: (image: GeneratedImage, context: { job: DurableGenerationJob; outputNodeId: string; imageIndex: number }) => GeneratedImage | null,
+  ): Promise<{ assets: ImageXOutputAsset[]; previous?: ImageXOutputAsset; deletedUrl?: string }> {
+    const locator = parseOutputAssetId(assetId);
+    const jobs = await readGenerationJobs(projectId);
+    const jobIndex = jobs.findIndex((candidate) => candidate.id === locator.jobId);
+    const job = jobs[jobIndex];
+    if (!job) throw new Error('Output run not found.');
+    const state = job.outputs[locator.outputNodeId];
+    if (!state) throw new Error('Output node result not found.');
+    const imageIndex = state.images.findIndex((image) => image.id === locator.imageId);
+    const image = state.images[imageIndex];
+    if (imageIndex < 0 || !image) throw new Error('Output image not found.');
+
+    const previous = outputAssetFromImage(job, locator.outputNodeId, state, image, imageIndex);
+    const nextImage = updater(image, { job, outputNodeId: locator.outputNodeId, imageIndex });
+    const now = new Date().toISOString();
+    state.updatedAt = now;
+    job.updatedAt = now;
+
+    if (nextImage) {
+      state.images = state.images.map((candidate, index) => (index === imageIndex ? nextImage : candidate));
+      job.results = job.results.map((result) =>
+        result.outputNodeId === locator.outputNodeId
+          ? { ...result, images: result.images.map((candidate) => (candidate.id === locator.imageId ? nextImage : candidate)) }
+          : result
+      );
+    } else {
+      state.images = state.images.filter((_, index) => index !== imageIndex);
+      job.results = job.results
+        .map((result) =>
+          result.outputNodeId === locator.outputNodeId
+            ? { ...result, images: result.images.filter((candidate) => candidate.id !== locator.imageId) }
+            : result
+        )
+        .filter((result) => result.images.length > 0 || result.outputNodeId !== locator.outputNodeId);
+    }
+
+    jobs[jobIndex] = job;
+    await writeGenerationJobs(projectId, jobs);
+    await writeFile(generationRunJobFile(projectId, job.id), `${JSON.stringify(job, null, 2)}\n`, 'utf8');
+    return {
+      assets: await listProjectOutputAssets(projectId),
+      previous,
+      ...(nextImage ? {} : { deletedUrl: image.url }),
+    };
+  }
+
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, name: 'imagex' });
   });
@@ -439,6 +538,22 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
     }
   );
 
+  app.patch('/api/projects/:projectId/node-assets/:assetId', async (req: Request<{ projectId: string; assetId: string }, unknown, { name?: string }>, res, next) => {
+    try {
+      res.json({ assets: await renameProjectNodeAsset(req.params.projectId || '', req.params.assetId || '', req.body.name || '') });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/api/projects/:projectId/node-assets/:assetId', async (req, res, next) => {
+    try {
+      res.json({ assets: await deleteProjectNodeAsset(req.params.projectId || '', req.params.assetId || '') });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post(
     '/api/projects/:projectId/assets',
     async (req: Request<{ projectId: string }, unknown, { name: string; mimeType: string; dataBase64: string }>, res, next) => {
@@ -461,6 +576,41 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
   app.delete('/api/projects/:projectId/assets/:assetId', async (req, res, next) => {
     try {
       res.json({ assets: await deleteProjectAsset(req.params.projectId || '', req.params.assetId || '') });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/projects/:projectId/output-assets', async (req, res, next) => {
+    try {
+      res.json({ assets: await listProjectOutputAssets(req.params.projectId || '') });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch('/api/projects/:projectId/output-assets/:assetId', async (req: Request<{ projectId: string; assetId: string }, unknown, { name?: string }>, res, next) => {
+    try {
+      const name = (req.body.name || '').trim();
+      res.json(await updateOutputAsset(req.params.projectId || '', req.params.assetId || '', (image) => ({
+        ...image,
+        name: name || image.name || 'Output',
+      })));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/api/projects/:projectId/output-assets/:assetId', async (req, res, next) => {
+    try {
+      const projectId = req.params.projectId || '';
+      const result = await updateOutputAsset(projectId, req.params.assetId || '', () => null);
+      if (result.previous?.path) {
+        const outputsRoot = resolve(projectOutputDir(projectId));
+        const target = resolve(result.previous.path);
+        if (!relative(outputsRoot, target).startsWith('..')) await rm(target, { force: true });
+      }
+      res.json(result);
     } catch (error) {
       next(error);
     }
@@ -687,6 +837,25 @@ export async function startServer(options: StartServerOptions): Promise<Server> 
 
       // Handle asset URL references (path starts with /api/)
       if (ref.name.startsWith('/api/')) {
+        const outputPath = outputPathFromProjectUrl(ref.name);
+        if (outputPath) {
+          try {
+            const file = await readFile(outputPath);
+            const ext = extname(outputPath).slice(1) || 'png';
+            const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+            resolved.push({
+              name: ref.name,
+              role: ref.role,
+              notes: ref.notes,
+              position: ref.position,
+              dataUrl: `data:${mimeType};base64,${file.toString('base64')}`,
+            });
+          } catch {
+            log('resolver', 'failed to read output file', { ref: ref.name, path: outputPath });
+          }
+          continue;
+        }
+
         // Extract asset ID from URL like /api/projects/xxx/asset-files/asset-id
         const parts = ref.name.split('/');
         const assetId = parts[parts.length - 1] || '';

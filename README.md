@@ -12,6 +12,7 @@ The app is currently a Vite/React web UI plus a local Express daemon. It is not 
 - **Local image previews**: crop, rotate/flip, blur, and color-balance render through the frontend WebGL pipeline.
 - **Output-node generation**: each output node is a generation target. Run selected outputs, force upstream dependencies, or run all outputs in dependency order.
 - **Durable generation jobs**: daemon-managed runs survive refreshes and recover partial output state after daemon restart.
+- **Asset library**: manage imported images, reusable node-snippet assets, and generated output images from run history in one panel.
 - **Local-first storage**: projects, workflows, assets, auth, run metadata, and generated files live under `IMAGEX_HOME` or `~/.imagex`.
 - **Codex image provider**: generation uses the OpenAI Codex Responses image tool transport, with `CODEX_API_BASE` override support for local mock testing.
 
@@ -96,7 +97,7 @@ CODEX_API_BASE=http://127.0.0.1:8787/backend-api/codex/responses npm run dev
 
 By default ImageX stores local data in `~/.imagex`. Set `IMAGEX_HOME` to use a different root.
 
-Generation run files are stored per project under:
+Imported image assets and reusable node-snippet assets live under each project's `assets/` directory. Generated output assets are flattened from run history and are stored per project under:
 
 ```text
 outputs/runs/index.json

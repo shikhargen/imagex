@@ -9,6 +9,7 @@ import type {
   ImageXEdge,
   ImageXNode,
   ImageXNodeAsset,
+  ImageXOutputAsset,
   ImageXProject,
   ImageXWorkflow,
   NodeType,
@@ -458,11 +459,11 @@ export function useEditorActions(deps: EditorActionsDeps) {
     // This function will be overridden below with the correct implementation.
   }
 
-  function selectAssetForFieldImpl(asset: ImageXAsset, picker: { nodeId: string; fieldId: string }) {
+  function selectAssetForFieldImpl(asset: ImageXAsset | ImageXOutputAsset, picker: { nodeId: string; fieldId: string }) {
     recordHistory();
     const { nodeId, fieldId } = picker;
     const { nodes: nextNodes } = updateNodeWorkflowData(nodesRef.current, nodeId, {
-      [fieldId]: asset.file,
+      [fieldId]: asset.type === 'image' ? asset.file : asset.url,
       assetId: asset.id,
       assetUrl: asset.url,
       assetName: asset.name,
@@ -665,12 +666,12 @@ export function useEditorActions(deps: EditorActionsDeps) {
     setActiveSidePanel(null);
   }
 
-  function addImageAssetNode(asset: ImageXAsset) {
+  function addImageAssetNode(asset: ImageXAsset | ImageXOutputAsset) {
     const position = flowApiRef.current?.screenToFlowPosition(lastMousePosRef.current) || { x: 160, y: 140 };
     const node = createUiWorkflowNode('image', position);
     node.data = {
       ...node.data,
-      path: asset.file,
+      path: asset.type === 'image' ? asset.file : asset.url,
       assetId: asset.id,
       assetUrl: asset.url,
       assetName: asset.name,
@@ -687,10 +688,11 @@ export function useEditorActions(deps: EditorActionsDeps) {
     const rootPosition = flowApiRef.current?.screenToFlowPosition(lastMousePosRef.current) || root.position;
     const offset = { x: rootPosition.x - root.position.x, y: rootPosition.y - root.position.y };
     const newNodes = asset.nodes.map((node) => {
-      const copy = cloneWorkflowNode(node);
+      const copy = sanitizeNodeAssetNodeForInsert(cloneWorkflowNode(node));
       copy.id = idMap.get(node.id)!;
       copy.position = { x: node.position.x + offset.x, y: node.position.y + offset.y };
       if (typeof copy.data.frameId === 'string' && idMap.has(copy.data.frameId)) copy.data.frameId = idMap.get(copy.data.frameId);
+      else delete copy.data.frameId;
       return copy;
     });
     const newEdges = asset.edges
@@ -1208,4 +1210,26 @@ export function useEditorActions(deps: EditorActionsDeps) {
     undoCount: undoStackRef.current.length,
     redoCount: redoStackRef.current.length,
   };
+}
+
+function sanitizeNodeAssetNodeForInsert(node: ImageXNode): ImageXNode {
+  const data = { ...node.data };
+  delete data.isDropTargetFrame;
+  if (node.type === 'codex-output') {
+    delete data.previewUrl;
+    delete data.previewUrls;
+    delete data.previewIndex;
+    delete data.generating;
+    delete data.generation;
+  }
+  const assetUrl = typeof data.assetUrl === 'string' ? data.assetUrl : '';
+  if (assetUrl.includes('/outputs/runs/')) {
+    delete data.assetId;
+    delete data.assetUrl;
+    delete data.assetName;
+    for (const [key, value] of Object.entries(data)) {
+      if (value === assetUrl) data[key] = '';
+    }
+  }
+  return { ...node, data };
 }

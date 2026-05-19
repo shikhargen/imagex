@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { setPreviewResolution } from './flow/imaging/index.js';
 import type {
   ImageXAsset,
+  ImageXOutputAsset,
   ImageXProject,
   ImageXProjectSummary,
   ImageXTemplateSummary,
@@ -108,6 +109,14 @@ export function App() {
     setActiveSidePanel,
     setOutputResults,
   });
+
+  useEffect(() => {
+    if (activeSidePanel === 'assets') void projectActions.refreshOutputAssets();
+  }, [activeSidePanel, project?.metadata.id]);
+
+  useEffect(() => {
+    if (assetPicker) void projectActions.refreshOutputAssets();
+  }, [assetPicker, project?.metadata.id]);
 
   // ─── Shortcuts ─────────────────────────────────────────────────────────────
 
@@ -275,6 +284,7 @@ export function App() {
     }
     if (menuState.type === 'selection') {
       if (action === 'duplicate') editor.duplicateSelection();
+      if (action === 'create-asset') projectActions.openCreateNodeAssetDialog('__selection__');
       if (action === 'delete') editor.deleteSelection();
       if (action === 'disconnect') editor.disconnectSelection();
       if (action === 'detach-frame') editor.detachSelectionFromFrames();
@@ -292,6 +302,16 @@ export function App() {
     if (menuState.type === 'asset') {
       if (action === 'rename') projectActions.renameAsset(menuState.assetId);
       if (action === 'delete') projectActions.deleteAsset(menuState.assetId);
+      return;
+    }
+    if (menuState.type === 'output-asset') {
+      if (action === 'rename') projectActions.renameOutputAsset(menuState.assetId);
+      if (action === 'delete') projectActions.deleteOutputAsset(menuState.assetId);
+      return;
+    }
+    if (menuState.type === 'node-asset') {
+      if (action === 'rename') projectActions.renameNodeAsset(menuState.assetId);
+      if (action === 'delete') projectActions.deleteNodeAsset(menuState.assetId);
       return;
     }
     if (menuState.type === 'project') {
@@ -313,6 +333,11 @@ export function App() {
     editor.selectAssetForField(asset, assetPicker);
   }
 
+  function selectOutputAssetForField(asset: ImageXOutputAsset) {
+    if (!assetPicker) return;
+    editor.selectAssetForField(asset, assetPicker);
+  }
+
   // ─── Dialog submission ─────────────────────────────────────────────────────
 
   async function submitTextDialog(value: string) {
@@ -322,6 +347,8 @@ export function App() {
     const dialog = textDialog;
     setTextDialog(null);
     if (dialog.type === 'rename-asset') await projectActions.submitRenameAsset(dialog.id, trimmed);
+    if (dialog.type === 'rename-output-asset') await projectActions.submitRenameOutputAsset(dialog.id, trimmed);
+    if (dialog.type === 'rename-node-asset') await projectActions.submitRenameNodeAsset(dialog.id, trimmed);
     if (dialog.type === 'rename-workflow') await projectActions.submitRenameWorkflow(dialog.id, trimmed);
     if (dialog.type === 'rename-project') await projectActions.submitRenameProject(dialog.id, trimmed);
     if (dialog.type === 'create-node-asset') await projectActions.createNodeAssetFromNode(dialog.id, trimmed);
@@ -522,11 +549,16 @@ export function App() {
             {activeSidePanel === 'assets' && workflow && (
               <AssetsPanel
                 assets={projectActions.assets}
+                outputAssets={projectActions.outputAssets}
                 nodeAssets={projectActions.nodeAssets}
                 onImport={projectActions.importAssets}
                 onAddImageAsset={editor.addImageAssetNode}
+                onAddOutputAsset={editor.addImageAssetNode}
                 onAddNodeAsset={editor.addNodeAsset}
                 onMenu={(assetId, position) => setMenu({ type: 'asset', assetId, x: position.x, y: position.y })}
+                onOutputMenu={(assetId, position) => setMenu({ type: 'output-asset', assetId, x: position.x, y: position.y })}
+                onNodeMenu={(assetId, position) => setMenu({ type: 'node-asset', assetId, x: position.x, y: position.y })}
+                onRefreshOutputs={projectActions.refreshOutputAssets}
               />
             )}
           </SidePanel>
@@ -586,9 +618,12 @@ export function App() {
       {assetPicker && (
         <AssetsModal
           assets={projectActions.assets}
+          outputAssets={projectActions.outputAssets}
           onImport={projectActions.importAssets}
           onSelect={selectAssetForField}
+          onSelectOutput={selectOutputAssetForField}
           onMenu={(assetId, position) => setMenu({ type: 'asset', assetId, x: position.x, y: position.y })}
+          onOutputMenu={(assetId, position) => setMenu({ type: 'output-asset', assetId, x: position.x, y: position.y })}
           onClose={() => setAssetPicker(null)}
         />
       )}
@@ -694,6 +729,16 @@ function FloatingContextMenu({
               { items: [{ action: 'rename', label: 'Rename' }] },
               { items: [{ action: 'delete', label: 'Delete', danger: true }] },
             ]
+          : menu.type === 'output-asset'
+            ? [
+                { items: [{ action: 'rename', label: 'Rename' }] },
+                { items: [{ action: 'delete', label: 'Delete', danger: true }] },
+              ]
+          : menu.type === 'node-asset'
+            ? [
+                { items: [{ action: 'rename', label: 'Rename' }] },
+                { items: [{ action: 'delete', label: 'Delete', danger: true }] },
+              ]
           : menu.type === 'project'
             ? [
                 { items: [{ action: 'open', label: 'Open' }] },
@@ -704,7 +749,7 @@ function FloatingContextMenu({
                 {
                   items: [
                     { action: 'duplicate', label: 'Duplicate' },
-                    ...(isFrame ? [] : [{ action: 'create-asset', label: 'Create asset' } as MenuAction]),
+                    ...(isFrame ? [] : [{ action: 'create-asset', label: 'Create node asset' } as MenuAction]),
                     ...(canDetach ? [{ action: 'detach-frame', label: 'Detach from frame' } as MenuAction] : []),
                   ],
                 },
@@ -921,18 +966,25 @@ const nodeChoices: Array<{ type: NodeType; label: string; description: string; i
 
 function AssetsModal({
   assets,
+  outputAssets,
   onImport,
   onSelect,
+  onSelectOutput,
   onMenu,
+  onOutputMenu,
   onClose,
 }: {
   assets: ImageXAsset[];
+  outputAssets: ImageXOutputAsset[];
   onImport: (files: FileList | null) => void;
   onSelect: (asset: ImageXAsset) => void;
+  onSelectOutput: (asset: ImageXOutputAsset) => void;
   onMenu: (assetId: string, position: { x: number; y: number }) => void;
+  onOutputMenu: (assetId: string, position: { x: number; y: number }) => void;
   onClose: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [tab, setTab] = useState<'images' | 'outputs'>('images');
   const handleBackdrop = useDismiss(onClose);
   return (
     <div className="prompt-overlay-backdrop" role="dialog" aria-modal="true" onClick={handleBackdrop}>
@@ -959,17 +1011,22 @@ function AssetsModal({
           />
         </header>
         <div className="assets-modal-body">
+          <div className="asset-picker-tabs">
+            <button type="button" className={tab === 'images' ? 'active' : ''} onClick={() => setTab('images')}>Images</button>
+            <button type="button" className={tab === 'outputs' ? 'active' : ''} onClick={() => setTab('outputs')}>Outputs</button>
+          </div>
           <div className="asset-grid-compact">
-            {assets.map((asset) => (
+            {(tab === 'images' ? assets : outputAssets).map((asset) => (
               <article
                 key={asset.id}
                 className="asset-card-compact"
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  onMenu(asset.id, { x: event.clientX, y: event.clientY });
+                  if (asset.type === 'image') onMenu(asset.id, { x: event.clientX, y: event.clientY });
+                  else onOutputMenu(asset.id, { x: event.clientX, y: event.clientY });
                 }}
               >
-                <button type="button" onClick={() => onSelect(asset)}>
+                <button type="button" onClick={() => asset.type === 'image' ? onSelect(asset) : onSelectOutput(asset)}>
                   <span className="asset-thumbnail">
                     <img src={asset.url} alt={asset.name} loading="lazy" />
                   </span>
@@ -977,7 +1034,8 @@ function AssetsModal({
                 </button>
               </article>
             ))}
-            {assets.length === 0 && <p className="muted">No image assets in this project yet.</p>}
+            {tab === 'images' && assets.length === 0 && <p className="muted">No image assets in this project yet.</p>}
+            {tab === 'outputs' && outputAssets.length === 0 && <p className="muted">No generated outputs in this project yet.</p>}
           </div>
         </div>
       </section>
